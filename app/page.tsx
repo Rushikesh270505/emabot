@@ -1,5 +1,6 @@
+import { CircleAlert } from "lucide-react";
 import { DashboardClient } from "./dashboard-client";
-import { buildSnapshot, type Candle, type StrategySnapshot } from "@/lib/market";
+import type { StrategySnapshot } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -10,37 +11,33 @@ async function getMarket(): Promise<StrategySnapshot> {
   });
 
   if (!response.ok) {
-    throw new Error("Unable to load BTC/USDT market data");
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Unable to load BTC/USDT market data");
   }
 
   return response.json();
 }
 
 export default async function Home() {
-  let market: StrategySnapshot;
-
   try {
-    market = await getMarket();
-  } catch {
-    market = fallbackSnapshot();
+    const market = await getMarket();
+    return <DashboardClient initialMarket={market} />;
+  } catch (error) {
+    return <MarketError message={error instanceof Error ? error.message : "Unable to load BTC/USDT market data"} />;
   }
-
-  return <DashboardClient initialMarket={market} />;
 }
 
-function fallbackSnapshot(): StrategySnapshot {
-  const now = Date.now();
-  const candles: Candle[] = Array.from({ length: 260 }, (_, index) => {
-    const close = 100000 + Math.sin(index / 8) * 1200 + index * 9;
-    return {
-      timestamp: new Date(now - (260 - index) * 15 * 60 * 1000).toISOString(),
-      open: close - 120,
-      high: close + 260,
-      low: close - 300,
-      close,
-      volume: 20 + Math.cos(index / 7) * 4
-    };
-  });
-
-  return buildSnapshot(candles);
+function MarketError({ message }: { message: string }) {
+  return (
+    <main className="shell error-shell">
+      <section className="error-panel">
+        <CircleAlert size={34} />
+        <h1>Live BTC/USDT Data Unavailable</h1>
+        <p>{message}</p>
+        <a className="button" href="/api/market">
+          Check market API
+        </a>
+      </section>
+    </main>
+  );
 }

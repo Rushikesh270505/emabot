@@ -15,6 +15,7 @@ export type Candle = {
 export type StrategySnapshot = {
   symbol: "BTC/USDT";
   timeframe: "15m";
+  source: string;
   price: number;
   changePct: number;
   signal: "BUY" | "SELL" | "HOLD";
@@ -47,6 +48,10 @@ export function enrichCandles(candles: Candle[]): Candle[] {
 }
 
 export function buildSnapshot(candles: Candle[]): StrategySnapshot {
+  if (candles.length < 201) {
+    throw new Error("At least 201 closed candles are required for EMA 200 strategy data.");
+  }
+
   const enriched = enrichCandles(candles);
   const latest = enriched[enriched.length - 1];
   const previous = enriched[enriched.length - 2];
@@ -78,6 +83,7 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
   return {
     symbol: "BTC/USDT",
     timeframe: "15m",
+    source: "Binance",
     price: latest.close,
     changePct,
     signal,

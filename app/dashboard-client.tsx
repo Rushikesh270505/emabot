@@ -61,7 +61,10 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
 
     function connectTickerStream() {
       setStreamStatus("connecting");
-      socket = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@ticker");
+      const streamUrl = market.source === "Binance US"
+        ? "wss://stream.binance.us:9443/ws/btcusdt@ticker"
+        : "wss://stream.binance.com:9443/ws/btcusdt@ticker";
+      socket = new WebSocket(streamUrl);
 
       socket.onopen = () => {
         setStreamStatus("live");
@@ -104,7 +107,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
       }
       socket?.close();
     };
-  }, []);
+  }, [market.source]);
 
   const signalClass = market.signal.toLowerCase();
   const changeIsPositive = market.changePct >= 0;
@@ -140,7 +143,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
                 <div className="coin">B</div>
                 <div>
                   <h2>{market.symbol}</h2>
-                  <p>Binance spot · live ticker plus 15m closed candles</p>
+                  <p>{market.source} spot · live ticker plus 15m closed candles</p>
                 </div>
               </div>
               <span className="pill">
@@ -187,6 +190,10 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
               <div className="status-item">
                 <span>Timeframe</span>
                 <strong>15m</strong>
+              </div>
+              <div className="status-item">
+                <span>Data Source</span>
+                <strong>{market.source}</strong>
               </div>
               <div className="status-item">
                 <span>Capital</span>
