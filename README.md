@@ -73,6 +73,15 @@ vercel --prod
 
 The Vercel frontend monitors public BTC/USDT market data. Keep the Python trading worker running separately on your computer or a VPS because Vercel serverless functions are not designed for persistent trading loops.
 
+Optional Vercel environment variables:
+
+```text
+BINANCE_API_KEY=your_binance_api_key
+BINANCE_API_SECRET=your_binance_api_secret
+```
+
+The dashboard does not expose these values to the browser. BTC/USDT live price data uses Binance public endpoints, so credentials are optional for the frontend.
+
 ## Backtesting
 
 Place historical CSV files in `data/historical` using filenames like:

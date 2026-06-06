@@ -6,11 +6,12 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const candlesUrl = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=260";
   const tickerUrl = "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT";
+  const headers = binanceHeaders();
 
   try {
     const [candlesResponse, tickerResponse] = await Promise.all([
-      fetch(candlesUrl, { cache: "no-store" }),
-      fetch(tickerUrl, { cache: "no-store" })
+      fetch(candlesUrl, { cache: "no-store", headers }),
+      fetch(tickerUrl, { cache: "no-store", headers })
     ]);
 
     if (!candlesResponse.ok || !tickerResponse.ok) {
@@ -44,4 +45,14 @@ export async function GET() {
       { status: 500 }
     );
   }
+}
+
+function binanceHeaders(): HeadersInit | undefined {
+  const apiKey = process.env.BINANCE_API_KEY;
+  if (!apiKey) {
+    return undefined;
+  }
+  return {
+    "X-MBX-APIKEY": apiKey
+  };
 }
