@@ -10,7 +10,6 @@ from .logger import TradeLogger
 from .models import Position, SignalType
 from .risk import (
     calculate_position_size,
-    calculate_take_profit,
     cap_position_by_cash,
     recent_swing_low,
     update_ema_trailing_stop,
@@ -90,7 +89,7 @@ def run_backtest(config_path: str, symbol: str) -> BacktestResult:
                         "status": "filled",
                         "balance": balance,
                         "stop_loss": position.stop_loss,
-                        "take_profit": position.take_profit,
+                        "take_profit": "",
                     }
                 )
                 position = None
@@ -123,14 +122,13 @@ def run_backtest(config_path: str, symbol: str) -> BacktestResult:
             fee = cost * fee_rate
 
         balance -= cost + fee
-        take_profit = calculate_take_profit(close, stop_loss, float(raw["risk"]["reward_to_risk"]))
         position = Position(
             symbol=symbol,
             amount=amount,
             entry_price=close,
             stop_loss=stop_loss,
-            take_profit=take_profit,
             opened_at=timestamp,
+            take_profit=None,
             trailing_stop=None,
         )
         trade_logger.log(
@@ -145,7 +143,7 @@ def run_backtest(config_path: str, symbol: str) -> BacktestResult:
                 "status": "filled",
                 "balance": balance,
                 "stop_loss": stop_loss,
-                "take_profit": take_profit,
+                "take_profit": "",
             }
         )
 
@@ -174,8 +172,6 @@ def _csv_path(data_dir: str, symbol: str, timeframe: str) -> Path:
 def _exit_price(candle: pd.Series, position: Position, close: float, reason: str) -> float:
     if "Stop loss" in reason:
         return position.stop_loss
-    if "Take profit" in reason:
-        return position.take_profit
     if "trailing stop" in reason:
         return position.trailing_stop or close
     return close

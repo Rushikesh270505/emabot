@@ -12,7 +12,8 @@ This is production-oriented code, but it is not financial advice. Run in `dry_ru
 - BTC/USDT only, 15 minute timeframe
 - EMA crossover strategy with RSI, trend, candle close, and volume filters
 - 1% account risk position sizing
-- Swing-low stop loss and 2:1 take profit
+- Swing-low stop loss
+- No fixed 1:2 take-profit chasing; exits follow the sell rules
 - Optional EMA 21 trailing stop
 - Duplicate-entry prevention with persistent state
 - CSV trade logging
@@ -31,6 +32,8 @@ cp config.example.yaml config.yaml
 ```
 
 Edit `.env` with Binance and optional Telegram credentials. Edit `config.yaml` before going live.
+
+The example starting capital is `100000` USDT.
 
 ## Live Bot
 
@@ -127,5 +130,4 @@ Sell:
 1. EMA 9 crosses below EMA 21.
 2. RSI 14 falls below 45.
 3. Stop loss is hit.
-4. Take profit is hit.
-5. Optional EMA 21 trailing stop is hit.
+4. Optional EMA 21 trailing stop is hit.

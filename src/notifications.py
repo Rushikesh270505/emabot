@@ -1,4 +1,6 @@
 import logging
+import json
+from typing import Any
 
 import requests
 
@@ -24,3 +26,8 @@ class TelegramNotifier:
             response.raise_for_status()
         except requests.RequestException as exc:
             logging.warning("Telegram notification failed: %s", exc)
+
+    def send_json(self, payload: dict[str, Any]) -> None:
+        """Send a pretty JSON payload as a Telegram text message."""
+        message = json.dumps(payload, indent=2, sort_keys=True, default=str)
+        self.send(message)

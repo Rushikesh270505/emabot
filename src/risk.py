@@ -27,14 +27,6 @@ def calculate_position_size(
     return risk_amount / risk_per_unit
 
 
-def calculate_take_profit(entry_price: float, stop_loss: float, reward_to_risk: float) -> float:
-    """Calculate long take profit from reward-to-risk ratio."""
-    risk_per_unit = entry_price - stop_loss
-    if risk_per_unit <= 0:
-        raise ValueError("Stop loss must be below entry price")
-    return entry_price + (risk_per_unit * reward_to_risk)
-
-
 def cap_position_by_cash(position_amount: float, balance: float, entry_price: float) -> float:
     """Prevent position size from exceeding available quote balance."""
     max_affordable = balance / entry_price

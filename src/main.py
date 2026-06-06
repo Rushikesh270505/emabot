@@ -2,6 +2,7 @@ import argparse
 import logging
 import time
 from datetime import datetime, timezone
+from typing import Any
 
 import ccxt
 import pandas as pd
@@ -14,7 +15,6 @@ from .models import Position, SignalType
 from .notifications import TelegramNotifier
 from .risk import (
     calculate_position_size,
-    calculate_take_profit,
     cap_position_by_cash,
     recent_swing_low,
     update_ema_trailing_stop,
@@ -108,10 +108,26 @@ def _process_symbol(
                     "status": order.status,
                     "balance": balance,
                     "stop_loss": position.stop_loss,
-                    "take_profit": position.take_profit,
+                    "take_profit": "",
                 }
             )
-            notifier.send(f"SELL {symbol} amount={order.amount} price={order.price:.8f} reason={signal.reason}")
+            notifier.send_json(
+                _trade_alert_payload(
+                    event=_exit_event(signal.reason),
+                    symbol=symbol,
+                    side="SELL",
+                    timestamp=timestamp,
+                    amount=order.amount,
+                    price=order.price,
+                    reason=signal.reason,
+                    order_id=order.order_id,
+                    status=order.status,
+                    balance=balance,
+                    stop_loss=position.stop_loss,
+                    take_profit=None,
+                    dry_run=config.dry_run,
+                )
+            )
             del positions[symbol]
         return positions
 
@@ -141,10 +157,6 @@ def _process_symbol(
         logging.info("Skipping %s because calculated amount is zero after precision rules", symbol)
         return positions
 
-    take_profit = exchange.price_to_precision(
-        symbol,
-        calculate_take_profit(close, stop_loss, float(raw["risk"]["reward_to_risk"])),
-    )
     stop_loss = exchange.price_to_precision(symbol, stop_loss)
     order = exchange.create_market_buy(symbol, amount, config.dry_run, close)
 
@@ -153,8 +165,8 @@ def _process_symbol(
         amount=order.amount,
         entry_price=order.price,
         stop_loss=stop_loss,
-        take_profit=take_profit,
         opened_at=datetime.now(timezone.utc).isoformat(),
+        take_profit=None,
         trailing_stop=None,
     )
     trade_logger.log(
@@ -169,12 +181,25 @@ def _process_symbol(
             "status": order.status,
             "balance": balance,
             "stop_loss": stop_loss,
-            "take_profit": take_profit,
+            "take_profit": "",
         }
     )
-    notifier.send(
-        f"BUY {symbol} amount={order.amount} price={order.price:.8f} "
-        f"stop={stop_loss:.8f} take_profit={take_profit:.8f}"
+    notifier.send_json(
+        _trade_alert_payload(
+            event="BUY",
+            symbol=symbol,
+            side="BUY",
+            timestamp=timestamp,
+            amount=order.amount,
+            price=order.price,
+            reason=signal.reason,
+            order_id=order.order_id,
+            status=order.status,
+            balance=balance,
+            stop_loss=stop_loss,
+            take_profit=None,
+            dry_run=config.dry_run,
+        )
     )
     return positions
 
@@ -209,6 +234,51 @@ def _timeframe_to_timedelta(timeframe: str) -> pd.Timedelta:
     if unit == "d":
         return pd.Timedelta(days=value)
     raise ValueError(f"Unsupported timeframe: {timeframe}")
+
+
+def _trade_alert_payload(
+    event: str,
+    symbol: str,
+    side: str,
+    timestamp: str,
+    amount: float,
+    price: float,
+    reason: str,
+    order_id: str,
+    status: str,
+    balance: float | str,
+    stop_loss: float,
+    take_profit: float | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Create consistent JSON alert bodies for Telegram trade events."""
+    return {
+        "event": event,
+        "symbol": symbol,
+        "market": "spot",
+        "timeframe": "15m",
+        "side": side,
+        "timestamp": timestamp,
+        "amount": amount,
+        "price": price,
+        "reason": reason,
+        "order_id": order_id,
+        "status": status,
+        "balance": balance,
+        "risk": {
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+        },
+        "dry_run": dry_run,
+    }
+
+
+def _exit_event(reason: str) -> str:
+    """Map exit reasons to compact Telegram event names."""
+    normalized = reason.lower()
+    if "stop loss" in normalized:
+        return "STOP_LOSS"
+    return "SELL"
 
 
 if __name__ == "__main__":

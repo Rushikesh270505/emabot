@@ -24,7 +24,7 @@ def evaluate_entry(df: pd.DataFrame) -> Signal:
 
 
 def evaluate_exit(df: pd.DataFrame, position: Position) -> Signal:
-    """Evaluate exit rules including stop loss, take profit, EMA exit, and RSI exit."""
+    """Evaluate exit rules including stop loss, EMA exit, RSI exit, and trailing stop."""
     if len(df) < 2 or df.iloc[-1].isna().any():
         return Signal(SignalType.HOLD, "Not enough indicator history")
 
@@ -34,8 +34,6 @@ def evaluate_exit(df: pd.DataFrame, position: Position) -> Signal:
 
     if low <= position.stop_loss:
         return Signal(SignalType.SELL, "Stop loss hit")
-    if close >= position.take_profit:
-        return Signal(SignalType.SELL, "Take profit hit")
     if position.trailing_stop is not None and close <= position.trailing_stop:
         return Signal(SignalType.SELL, "EMA21 trailing stop hit")
     if has_crossed_below(df, "ema_9", "ema_21"):

@@ -307,6 +307,16 @@ input {
   color: var(--red);
 }
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .table-wrap {
   overflow: hidden;
 }

@@ -4,18 +4,21 @@ import { buildSnapshot, type Candle } from "@/lib/market";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=260";
+  const candlesUrl = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=260";
+  const tickerUrl = "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT";
 
   try {
-    const response = await fetch(url, {
-      next: { revalidate: 30 }
-    });
+    const [candlesResponse, tickerResponse] = await Promise.all([
+      fetch(candlesUrl, { cache: "no-store" }),
+      fetch(tickerUrl, { cache: "no-store" })
+    ]);
 
-    if (!response.ok) {
+    if (!candlesResponse.ok || !tickerResponse.ok) {
       return NextResponse.json({ error: "Binance market data request failed" }, { status: 502 });
     }
 
-    const rows = (await response.json()) as unknown[][];
+    const rows = (await candlesResponse.json()) as unknown[][];
+    const ticker = (await tickerResponse.json()) as { lastPrice: string; priceChangePercent: string };
     const now = Date.now();
     const closedRows = rows.filter((row) => Number(row[6]) < now);
     const candles: Candle[] = closedRows.map((row) => ({
@@ -27,7 +30,14 @@ export async function GET() {
       volume: Number(row[5])
     }));
 
-    return NextResponse.json(buildSnapshot(candles));
+    const snapshot = buildSnapshot(candles);
+
+    return NextResponse.json({
+      ...snapshot,
+      price: Number(ticker.lastPrice),
+      changePct: Number(ticker.priceChangePercent),
+      updatedAt: new Date().toISOString()
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown market data error" },

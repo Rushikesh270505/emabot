@@ -15,7 +15,6 @@ trading:
 
 risk:
   risk_per_trade: 0.01
-  reward_to_risk: 2.0
   swing_lookback: 10
   stop_buffer_pct: 0.001
   use_trailing_stop: true
@@ -30,6 +29,6 @@ storage:
   state_file: data/state.json
 
 backtest:
-  starting_balance: 10000
+  starting_balance: 100000
   fee_rate: 0.001
   data_dir: data/historical

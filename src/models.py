@@ -21,8 +21,8 @@ class Position:
     amount: float
     entry_price: float
     stop_loss: float
-    take_profit: float
     opened_at: str
+    take_profit: Optional[float] = None
     trailing_stop: Optional[float] = None
 
 
