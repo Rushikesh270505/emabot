@@ -18,9 +18,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { formatNumber, formatUsd, type StrategySnapshot } from "@/lib/market";
 import { StrategyChart } from "./strategy-chart";
 
+type StreamStatus = "connecting" | "live" | "polling";
+
 export function DashboardClient({ initialMarket }: { initialMarket: StrategySnapshot }) {
   const [market, setMarket] = useState(initialMarket);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("connecting");
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +51,58 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let socket: WebSocket | undefined;
+    let reconnectTimer: number | undefined;
+    let closedByComponent = false;
+
+    function connectTickerStream() {
+      setStreamStatus("connecting");
+      socket = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@ticker");
+
+      socket.onopen = () => {
+        setStreamStatus("live");
+      };
+
+      socket.onmessage = (event) => {
+        const ticker = JSON.parse(event.data) as { c?: string; P?: string; E?: number };
+        const price = Number(ticker.c);
+        const changePct = Number(ticker.P);
+        if (!Number.isFinite(price)) {
+          return;
+        }
+        setMarket((current) => ({
+          ...current,
+          price,
+          changePct: Number.isFinite(changePct) ? changePct : current.changePct,
+          updatedAt: new Date(ticker.E ?? Date.now()).toISOString()
+        }));
+      };
+
+      socket.onerror = () => {
+        setStreamStatus("polling");
+      };
+
+      socket.onclose = () => {
+        if (closedByComponent) {
+          return;
+        }
+        setStreamStatus("polling");
+        reconnectTimer = window.setTimeout(connectTickerStream, 5000);
+      };
+    }
+
+    connectTickerStream();
+
+    return () => {
+      closedByComponent = true;
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      socket?.close();
     };
   }, []);
 
@@ -106,10 +161,16 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
                 </span>
                 <p className="signal-copy">{market.reason}</p>
               </div>
-              <span className={`pill ${changeIsPositive ? "ok" : "no"}`}>
-                {changeIsPositive ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
-                {market.changePct.toFixed(2)}% · 24h
-              </span>
+              <div className="market-pills">
+                <span className={`pill stream ${streamStatus}`}>
+                  <span />
+                  {streamStatus === "live" ? "WebSocket live" : streamStatus === "connecting" ? "Connecting" : "Polling fallback"}
+                </span>
+                <span className={`pill ${changeIsPositive ? "ok" : "no"}`}>
+                  {changeIsPositive ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
+                  {market.changePct.toFixed(2)}% · 24h
+                </span>
+              </div>
             </div>
           </section>
 

@@ -204,6 +204,29 @@ input {
   border-top: 1px solid var(--line);
 }
 
+.market-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.stream span {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: var(--amber);
+}
+
+.stream.live span {
+  background: var(--green);
+  box-shadow: 0 0 14px rgba(61, 220, 151, 0.75);
+}
+
+.stream.polling span {
+  background: var(--blue);
+}
+
 .chart-panel {
   margin-bottom: 1rem;
   overflow: hidden;
