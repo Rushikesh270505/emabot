@@ -171,7 +171,6 @@ input {
 .market-panel,
 .status,
 .card,
-.table-wrap,
 .chart-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -420,6 +419,10 @@ input {
   margin-bottom: 1rem;
 }
 
+.compact-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .card {
   min-width: 0;
   padding: 1rem;
@@ -471,42 +474,6 @@ input {
   }
 }
 
-.table-wrap {
-  overflow: hidden;
-}
-
-.table-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem;
-  border-bottom: 1px solid var(--line);
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid rgba(38, 49, 61, 0.65);
-  text-align: left;
-}
-
-th {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-td {
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 860px) {
   .hero,
   .grid,
@@ -532,13 +499,5 @@ td {
 
   .button {
     flex: 1;
-  }
-
-  .table-wrap {
-    overflow-x: auto;
-  }
-
-  table {
-    min-width: 720px;
   }
 }

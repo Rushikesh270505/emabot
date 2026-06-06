@@ -1,11 +1,13 @@
 "use client";
 
 import { BarChart3 } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { formatNumber, formatUsd, type Candle } from "@/lib/market";
 
 type PointKey = "close" | "ema9" | "ema21" | "ema200";
 
-const WIDTH = 1100;
+const MIN_WIDTH = 1100;
+const CANDLE_SPACING = 12;
 const PRICE_HEIGHT = 360;
 const RSI_HEIGHT = 130;
 const VOLUME_HEIGHT = 120;
@@ -15,9 +17,21 @@ const PAD_X = 46;
 const PAD_TOP = 24;
 const PAD_BOTTOM = 24;
 
-export function StrategyChart({ candles }: { candles: Candle[] }) {
+export function StrategyChart({
+  candles,
+  isLoadingOlder,
+  onLoadOlder
+}: {
+  candles: Candle[];
+  isLoadingOlder: boolean;
+  onLoadOlder: () => void;
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const didInitialScroll = useRef(false);
+  const previousLength = useRef(candles.length);
   const visible = candles.filter((candle) => candle.ema200 !== undefined);
   const series = visible.length > 10 ? visible : candles;
+  const width = Math.max(MIN_WIDTH, PAD_X * 2 + series.length * CANDLE_SPACING);
   const priceValues = series.flatMap((candle) => [
     candle.high,
     candle.low,
@@ -30,13 +44,48 @@ export function StrategyChart({ candles }: { candles: Candle[] }) {
   const maxPrice = Math.max(...priceValues);
   const maxVolume = Math.max(...series.map((candle) => candle.volume));
 
-  const xFor = (index: number) => PAD_X + (index / Math.max(series.length - 1, 1)) * (WIDTH - PAD_X * 2);
+  const xFor = (index: number) => PAD_X + index * CANDLE_SPACING;
   const priceY = (value: number) => scale(value, minPrice, maxPrice, PRICE_HEIGHT - PAD_BOTTOM, PAD_TOP);
   const rsiY = (value: number) => PRICE_HEIGHT + GAP + scale(value, 0, 100, RSI_HEIGHT - PAD_BOTTOM, PAD_TOP);
   const volumeY = (value: number) =>
     PRICE_HEIGHT + GAP + RSI_HEIGHT + GAP + scale(value, 0, maxVolume, VOLUME_HEIGHT - PAD_BOTTOM, PAD_TOP);
   const volumeBase = PRICE_HEIGHT + GAP + RSI_HEIGHT + GAP + VOLUME_HEIGHT - PAD_BOTTOM;
-  const candleWidth = Math.max(3, Math.min(9, (WIDTH - PAD_X * 2) / Math.max(series.length, 1) * 0.56));
+  const candleWidth = 7;
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || didInitialScroll.current) {
+      return;
+    }
+    scroller.scrollLeft = scroller.scrollWidth;
+    didInitialScroll.current = true;
+  }, []);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const addedCandles = candles.length - previousLength.current;
+    if (scroller && didInitialScroll.current && addedCandles > 0) {
+      scroller.scrollLeft += addedCandles * CANDLE_SPACING;
+    }
+    previousLength.current = candles.length;
+  }, [candles.length]);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) {
+      return;
+    }
+
+    function handleScroll() {
+      const currentScroller = scrollerRef.current;
+      if (currentScroller && currentScroller.scrollLeft < 140 && !isLoadingOlder) {
+        onLoadOlder();
+      }
+    }
+
+    scroller.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", handleScroll);
+  }, [isLoadingOlder, onLoadOlder]);
 
   return (
     <section className="chart-panel">
@@ -47,7 +96,7 @@ export function StrategyChart({ candles }: { candles: Candle[] }) {
         </div>
         <span className="pill">
           <BarChart3 size={15} />
-          {series.length} candles
+          {isLoadingOlder ? "Loading history" : `${series.length} candles`}
         </span>
       </div>
 
@@ -60,8 +109,8 @@ export function StrategyChart({ candles }: { candles: Candle[] }) {
         <LegendItem color="#8bd3dd" label="Volume SMA 20" />
       </div>
 
-      <div className="chart-scroll">
-        <svg className="chart" viewBox={`0 0 ${WIDTH} ${TOTAL_HEIGHT}`} role="img" aria-label="BTC strategy indicator chart">
+      <div className="chart-scroll" ref={scrollerRef}>
+        <svg className="chart" style={{ width }} viewBox={`0 0 ${width} ${TOTAL_HEIGHT}`} role="img" aria-label="BTC strategy indicator chart">
           <defs>
             <linearGradient id="priceFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="#3ddc97" stopOpacity="0.22" />
@@ -69,12 +118,12 @@ export function StrategyChart({ candles }: { candles: Candle[] }) {
             </linearGradient>
           </defs>
 
-          <PanelGrid y={0} height={PRICE_HEIGHT} />
-          <PanelGrid y={PRICE_HEIGHT + GAP} height={RSI_HEIGHT} />
-          <PanelGrid y={PRICE_HEIGHT + GAP + RSI_HEIGHT + GAP} height={VOLUME_HEIGHT} />
+          <PanelGrid y={0} height={PRICE_HEIGHT} width={width} />
+          <PanelGrid y={PRICE_HEIGHT + GAP} height={RSI_HEIGHT} width={width} />
+          <PanelGrid y={PRICE_HEIGHT + GAP + RSI_HEIGHT + GAP} height={VOLUME_HEIGHT} width={width} />
 
-          <PriceLabels min={minPrice} max={maxPrice} yFor={priceY} />
-          <RsiGuide yFor={rsiY} />
+          <PriceLabels min={minPrice} max={maxPrice} yFor={priceY} width={width} />
+          <RsiGuide yFor={rsiY} width={width} />
 
           <path
             d={`${linePath(series, xFor, priceY, "close")} L ${xFor(series.length - 1)} ${PRICE_HEIGHT - PAD_BOTTOM} L ${xFor(0)} ${PRICE_HEIGHT - PAD_BOTTOM} Z`}
@@ -108,10 +157,10 @@ export function StrategyChart({ candles }: { candles: Candle[] }) {
           <SeriesPath candles={series} xFor={xFor} yFor={priceY} field="ema21" color="#6aa8ff" width={2.2} />
           <SeriesPath candles={series} xFor={xFor} yFor={priceY} field="ema200" color="#f6c453" width={2.2} />
 
-          <line x1={PAD_X} x2={WIDTH - PAD_X} y1={rsiY(70)} y2={rsiY(70)} stroke="#ff5c7a" strokeDasharray="5 7" opacity="0.55" />
-          <line x1={PAD_X} x2={WIDTH - PAD_X} y1={rsiY(55)} y2={rsiY(55)} stroke="#3ddc97" strokeDasharray="5 7" opacity="0.4" />
-          <line x1={PAD_X} x2={WIDTH - PAD_X} y1={rsiY(45)} y2={rsiY(45)} stroke="#f6c453" strokeDasharray="5 7" opacity="0.4" />
-          <line x1={PAD_X} x2={WIDTH - PAD_X} y1={rsiY(30)} y2={rsiY(30)} stroke="#6aa8ff" strokeDasharray="5 7" opacity="0.45" />
+          <line x1={PAD_X} x2={width - PAD_X} y1={rsiY(70)} y2={rsiY(70)} stroke="#ff5c7a" strokeDasharray="5 7" opacity="0.55" />
+          <line x1={PAD_X} x2={width - PAD_X} y1={rsiY(55)} y2={rsiY(55)} stroke="#3ddc97" strokeDasharray="5 7" opacity="0.4" />
+          <line x1={PAD_X} x2={width - PAD_X} y1={rsiY(45)} y2={rsiY(45)} stroke="#f6c453" strokeDasharray="5 7" opacity="0.4" />
+          <line x1={PAD_X} x2={width - PAD_X} y1={rsiY(30)} y2={rsiY(30)} stroke="#6aa8ff" strokeDasharray="5 7" opacity="0.45" />
           <path d={rsiPath(series, xFor, rsiY)} fill="none" stroke="#b58cff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
 
           {series.map((candle, index) => {
@@ -149,22 +198,22 @@ export function StrategyChart({ candles }: { candles: Candle[] }) {
   );
 }
 
-function PanelGrid({ y, height }: { y: number; height: number }) {
+function PanelGrid({ y, height, width }: { y: number; height: number; width: number }) {
   return (
     <g>
-      <rect x="18" y={y} width={WIDTH - 36} height={height} rx="8" fill="rgba(255,255,255,0.018)" stroke="rgba(148,163,184,0.14)" />
+      <rect x="18" y={y} width={width - 36} height={height} rx="8" fill="rgba(255,255,255,0.018)" stroke="rgba(148,163,184,0.14)" />
       {[0.25, 0.5, 0.75].map((tick) => (
-        <line key={tick} x1={PAD_X} x2={WIDTH - PAD_X} y1={y + height * tick} y2={y + height * tick} stroke="rgba(148,163,184,0.12)" />
+        <line key={tick} x1={PAD_X} x2={width - PAD_X} y1={y + height * tick} y2={y + height * tick} stroke="rgba(148,163,184,0.12)" />
       ))}
     </g>
   );
 }
 
-function PriceLabels({ min, max, yFor }: { min: number; max: number; yFor: (value: number) => number }) {
+function PriceLabels({ min, max, yFor, width }: { min: number; max: number; yFor: (value: number) => number; width: number }) {
   return (
     <g>
       {[min, (min + max) / 2, max].map((value) => (
-        <text key={value} x={WIDTH - PAD_X + 8} y={yFor(value) + 4} fill="#94a3b8" fontSize="11">
+        <text key={value} x={width - PAD_X + 8} y={yFor(value) + 4} fill="#94a3b8" fontSize="11">
           {formatUsd(value)}
         </text>
       ))}
@@ -172,11 +221,11 @@ function PriceLabels({ min, max, yFor }: { min: number; max: number; yFor: (valu
   );
 }
 
-function RsiGuide({ yFor }: { yFor: (value: number) => number }) {
+function RsiGuide({ yFor, width }: { yFor: (value: number) => number; width: number }) {
   return (
     <g>
       {[70, 55, 45, 30].map((value) => (
-        <text key={value} x={WIDTH - PAD_X + 8} y={yFor(value) + 4} fill="#94a3b8" fontSize="11">
+        <text key={value} x={width - PAD_X + 8} y={yFor(value) + 4} fill="#94a3b8" fontSize="11">
           {value}
         </text>
       ))}

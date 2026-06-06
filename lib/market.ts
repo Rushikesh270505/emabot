@@ -93,7 +93,7 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
     previous,
     conditions,
     candles: enriched.slice(-8),
-    chartCandles: enriched.slice(-120)
+    chartCandles: enriched.filter((candle) => candle.ema200 !== undefined).slice(-220)
   };
 }
 

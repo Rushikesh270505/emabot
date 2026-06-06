@@ -8,9 +8,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
-  Radio,
   RefreshCw,
-  Server,
   ShieldCheck,
   XCircle
 } from "lucide-react";
@@ -22,7 +20,9 @@ type StreamStatus = "connecting" | "live" | "polling";
 
 export function DashboardClient({ initialMarket }: { initialMarket: StrategySnapshot }) {
   const [market, setMarket] = useState(initialMarket);
+  const [chartCandles, setChartCandles] = useState(initialMarket.chartCandles);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("connecting");
 
   useEffect(() => {
@@ -38,6 +38,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
         const nextMarket = (await response.json()) as StrategySnapshot;
         if (!cancelled) {
           setMarket(nextMarket);
+          setChartCandles((current) => mergeCandles(current, nextMarket.chartCandles));
         }
       } finally {
         if (!cancelled) {
@@ -112,6 +113,29 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
   const signalClass = market.signal.toLowerCase();
   const changeIsPositive = market.changePct >= 0;
 
+  async function loadOlderCandles() {
+    if (isLoadingOlder || chartCandles.length === 0) {
+      return;
+    }
+
+    try {
+      setIsLoadingOlder(true);
+      const oldest = new Date(chartCandles[0].timestamp).getTime();
+      const params = new URLSearchParams({
+        endTime: String(oldest - 1),
+        source: market.source
+      });
+      const response = await fetch(`/api/candles?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) {
+        return;
+      }
+      const payload = (await response.json()) as { candles: typeof chartCandles };
+      setChartCandles((current) => mergeCandles(payload.candles, current));
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -126,7 +150,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
         </div>
         <div className="actions">
           <a className="button" href="/api/market" title="Open raw market snapshot">
-            <Radio size={17} />
+            <Activity size={17} />
             Live data
           </a>
           <button className="icon-button" title="Refresh" aria-label="Refresh" onClick={() => window.location.reload()}>
@@ -207,9 +231,9 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
           </aside>
         </div>
 
-        <StrategyChart candles={market.chartCandles} />
+        <StrategyChart candles={chartCandles} isLoadingOlder={isLoadingOlder} onLoadOlder={loadOlderCandles} />
 
-        <section className="grid">
+        <section className="grid compact-grid">
           <InfoCard title="Trend Filters" icon={<Activity size={18} />}>
             <div className="metric-grid">
               <Metric label="EMA 9" value={formatUsdValue(market.latest.ema9)} />
@@ -225,26 +249,9 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
               <Metric label="Vol SMA 20" value={formatNumber(market.latest.volumeSma20, 2)} />
             </div>
           </InfoCard>
-
-          <InfoCard title="Execution Model" icon={<Server size={18} />}>
-            <div className="checklist">
-              <div className="check">
-                <CheckCircle2 className="ok" size={18} />
-                <span>Spot market orders via Python worker</span>
-              </div>
-              <div className="check">
-                <CheckCircle2 className="ok" size={18} />
-                <span>Swing-low stop, no fixed reward target</span>
-              </div>
-              <div className="check">
-                <CheckCircle2 className="ok" size={18} />
-                <span>JSON Telegram alerts on entries and exits</span>
-              </div>
-            </div>
-          </InfoCard>
         </section>
 
-        <section className="grid">
+        <section className="grid compact-grid">
           <InfoCard title="Entry Checklist" icon={<CheckCircle2 size={18} />}>
             <div className="checklist">
               {market.conditions.map((condition) => (
@@ -272,57 +279,6 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
               </div>
             </div>
           </InfoCard>
-
-          <InfoCard title="Deployment" icon={<Radio size={18} />}>
-            <div className="checklist">
-              <div className="check">
-                <CheckCircle2 className="ok" size={18} />
-                <span>Vercel hosts this live dashboard</span>
-              </div>
-              <div className="check">
-                <CircleAlert className="muted" size={18} />
-                <span>Run Python worker on VPS or laptop</span>
-              </div>
-              <div className="check">
-                <CircleAlert className="muted" size={18} />
-                <span>Keep Binance withdrawals disabled</span>
-              </div>
-            </div>
-          </InfoCard>
-        </section>
-
-        <section className="table-wrap">
-          <div className="table-head">
-            <div>
-              <h3>Recent Closed Candles</h3>
-              <p className="table-note">BTC/USDT · 15 minute OHLCV</p>
-            </div>
-            <span className="pill">Last {market.candles.length}</span>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Close</th>
-                <th>EMA 9</th>
-                <th>EMA 21</th>
-                <th>RSI</th>
-                <th>Volume</th>
-              </tr>
-            </thead>
-            <tbody>
-              {market.candles.map((candle) => (
-                <tr key={candle.timestamp}>
-                  <td>{new Date(candle.timestamp).toLocaleString()}</td>
-                  <td>{formatUsd(candle.close)}</td>
-                  <td>{formatUsdValue(candle.ema9)}</td>
-                  <td>{formatUsdValue(candle.ema21)}</td>
-                  <td>{formatNumber(candle.rsi14, 1)}</td>
-                  <td>{formatNumber(candle.volume, 2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </section>
       </section>
     </main>
@@ -360,4 +316,14 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function formatUsdValue(value: number | undefined) {
   return value === undefined || Number.isNaN(value) ? "-" : formatUsd(value);
+}
+
+function mergeCandles<T extends { timestamp: string }>(left: T[], right: T[]): T[] {
+  const byTimestamp = new Map<string, T>();
+  [...left, ...right].forEach((candle) => {
+    byTimestamp.set(candle.timestamp, candle);
+  });
+  return Array.from(byTimestamp.values()).sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
 }
