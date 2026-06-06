@@ -1,21 +1,21 @@
 import { CircleAlert } from "lucide-react";
 import { DashboardClient } from "./dashboard-client";
-import type { StrategySnapshot } from "@/lib/market";
+import { buildSnapshot, type Candle, type StrategySnapshot } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
 async function getMarket(): Promise<StrategySnapshot> {
-  const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
-  const response = await fetch(`${baseUrl}/api/market`, {
-    cache: "no-store"
-  });
+  const errors: string[] = [];
 
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? "Unable to load BTC/USDT market data");
+  for (const provider of PROVIDERS) {
+    try {
+      return await fetchProviderMarket(provider);
+    } catch (error) {
+      errors.push(`${provider.name}: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
   }
 
-  return response.json();
+  throw new Error(errors.join(" | "));
 }
 
 export default async function Home() {
@@ -25,6 +25,53 @@ export default async function Home() {
   } catch (error) {
     return <MarketError message={error instanceof Error ? error.message : "Unable to load BTC/USDT market data"} />;
   }
+}
+
+type Provider = {
+  name: string;
+  baseUrl: string;
+};
+
+const PROVIDERS: Provider[] = [
+  { name: "Binance Global", baseUrl: "https://api.binance.com" },
+  { name: "Binance US", baseUrl: "https://api.binance.us" }
+];
+
+async function fetchProviderMarket(provider: Provider): Promise<StrategySnapshot> {
+  const candlesUrl = `${provider.baseUrl}/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=260`;
+  const tickerUrl = `${provider.baseUrl}/api/v3/ticker/24hr?symbol=BTCUSDT`;
+
+  const [candlesResponse, tickerResponse] = await Promise.all([
+    fetch(candlesUrl, { cache: "no-store" }),
+    fetch(tickerUrl, { cache: "no-store" })
+  ]);
+
+  if (!candlesResponse.ok || !tickerResponse.ok) {
+    throw new Error(`HTTP ${candlesResponse.status}/${tickerResponse.status}`);
+  }
+
+  const rows = (await candlesResponse.json()) as unknown[][];
+  const ticker = (await tickerResponse.json()) as { lastPrice: string; priceChangePercent: string };
+  const now = Date.now();
+  const closedRows = rows.filter((row) => Number(row[6]) < now);
+  const candles: Candle[] = closedRows.map((row) => ({
+    timestamp: new Date(Number(row[0])).toISOString(),
+    open: Number(row[1]),
+    high: Number(row[2]),
+    low: Number(row[3]),
+    close: Number(row[4]),
+    volume: Number(row[5])
+  }));
+
+  const snapshot = buildSnapshot(candles);
+
+  return {
+    ...snapshot,
+    source: provider.name,
+    price: Number(ticker.lastPrice),
+    changePct: Number(ticker.priceChangePercent),
+    updatedAt: new Date().toISOString()
+  };
 }
 
 function MarketError({ message }: { message: string }) {
