@@ -37,11 +37,10 @@ export async function GET() {
 async function fetchProviderMarket(provider: Provider): Promise<StrategySnapshot> {
   const candlesUrl = `${provider.baseUrl}/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=260`;
   const tickerUrl = `${provider.baseUrl}/api/v3/ticker/24hr?symbol=BTCUSDT`;
-  const headers = binanceHeaders();
 
   const [candlesResponse, tickerResponse] = await Promise.all([
-    fetch(candlesUrl, { cache: "no-store", headers }),
-    fetch(tickerUrl, { cache: "no-store", headers })
+    fetch(candlesUrl, { cache: "no-store" }),
+    fetch(tickerUrl, { cache: "no-store" })
   ]);
 
   if (!candlesResponse.ok || !tickerResponse.ok) {
@@ -69,15 +68,5 @@ async function fetchProviderMarket(provider: Provider): Promise<StrategySnapshot
     price: Number(ticker.lastPrice),
     changePct: Number(ticker.priceChangePercent),
     updatedAt: new Date().toISOString()
-  };
-}
-
-function binanceHeaders(): HeadersInit | undefined {
-  const apiKey = process.env.BINANCE_API_KEY;
-  if (!apiKey) {
-    return undefined;
-  }
-  return {
-    "X-MBX-APIKEY": apiKey
   };
 }
