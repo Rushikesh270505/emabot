@@ -24,6 +24,7 @@ export type StrategySnapshot = {
   previous: Candle;
   conditions: Array<{ label: string; passed: boolean }>;
   candles: Candle[];
+  chartCandles: Candle[];
 };
 
 export function enrichCandles(candles: Candle[]): Candle[] {
@@ -85,7 +86,8 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
     latest,
     previous,
     conditions,
-    candles: enriched.slice(-8)
+    candles: enriched.slice(-8),
+    chartCandles: enriched.slice(-120)
   };
 }
 

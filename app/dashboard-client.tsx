@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { formatNumber, formatUsd, type StrategySnapshot } from "@/lib/market";
+import { StrategyChart } from "./strategy-chart";
 
 export function DashboardClient({ initialMarket }: { initialMarket: StrategySnapshot }) {
   const [market, setMarket] = useState(initialMarket);
@@ -137,6 +138,8 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
             </div>
           </aside>
         </div>
+
+        <StrategyChart candles={market.chartCandles} />
 
         <section className="grid">
           <InfoCard title="Trend Filters" icon={<Activity size={18} />}>
