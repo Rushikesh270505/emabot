@@ -8,12 +8,9 @@ trading:
   quote_currency: USDT
   symbols:
     - BTC/USDT
-    - ETH/USDT
-    - SOL/USDT
-    - BNB/USDT
   poll_seconds: 60
   min_candles: 260
-  max_open_positions: 4
+  max_open_positions: 1
   dry_run: true
 
 risk:

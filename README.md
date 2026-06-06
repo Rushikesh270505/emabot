@@ -1,6 +1,6 @@
-# Binance Spot EMA Trading Bot
+# BTC/USDT Binance Spot EMA Trading Bot
 
-Python 3 crypto spot trading bot for Binance using EMA 9, EMA 21, EMA 200, RSI 14, and Volume SMA 20 on the 15 minute timeframe.
+Python 3 crypto spot trading bot for Binance focused on BTC/USDT spot trading using EMA 9, EMA 21, EMA 200, RSI 14, and Volume SMA 20 on the 15 minute timeframe. The repo also includes a Vercel-ready Next.js dashboard for monitoring the BTC/USDT strategy signal.
 
 ## Important
 
@@ -9,6 +9,7 @@ This is production-oriented code, but it is not financial advice. Run in `dry_ru
 ## Features
 
 - Binance spot trading through `ccxt`
+- BTC/USDT only, 15 minute timeframe
 - EMA crossover strategy with RSI, trend, candle close, and volume filters
 - 1% account risk position sizing
 - Swing-low stop loss and 2:1 take profit
@@ -17,7 +18,7 @@ This is production-oriented code, but it is not financial advice. Run in `dry_ru
 - CSV trade logging
 - Telegram notifications
 - Backtesting CLI using CSV historical data
-- Config-driven symbols and risk settings
+- Vercel-ready BTC strategy dashboard
 
 ## Installation
 
@@ -48,12 +49,32 @@ trading:
 
 Your Binance API key should have spot trading enabled and withdrawal disabled.
 
+## Vercel Frontend
+
+Install and run the dashboard locally:
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+Deploy to Vercel:
+
+```bash
+npm install -g vercel
+vercel
+vercel --prod
+```
+
+The Vercel frontend monitors public BTC/USDT market data. Keep the Python trading worker running separately on your computer or a VPS because Vercel serverless functions are not designed for persistent trading loops.
+
 ## Backtesting
 
 Place historical CSV files in `data/historical` using filenames like:
 
 - `BTC_USDT_15m.csv`
-- `ETH_USDT_15m.csv`
 
 Required columns:
 
@@ -86,6 +107,9 @@ src/
   risk.py              Position sizing and stops
   state.py             Persistent open-position state
   strategy.py          Trading rules
+app/
+  page.tsx             BTC/USDT Vercel dashboard
+  api/market/route.ts  Binance public market data endpoint
 ```
 
 ## Strategy Rules
@@ -105,4 +129,3 @@ Sell:
 3. Stop loss is hit.
 4. Take profit is hit.
 5. Optional EMA 21 trailing stop is hit.
-
