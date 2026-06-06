@@ -11,7 +11,7 @@ This is production-oriented code, but it is not financial advice. Run in `dry_ru
 - Binance spot trading through `ccxt`
 - BTC/USDT only, 15 minute timeframe
 - EMA crossover strategy with RSI, trend, candle close, and volume filters
-- 1% account risk position sizing
+- Full-balance spot entries and full-quantity exits
 - Swing-low stop loss
 - No fixed 1:2 take-profit chasing; exits follow the sell rules
 - Optional EMA 21 trailing stop
@@ -34,6 +34,8 @@ cp config.example.yaml config.yaml
 Edit `.env` with Binance and optional Telegram credentials. Edit `config.yaml` before going live.
 
 The example starting capital is `100000` USDT.
+
+The bot uses the full available USDT balance on each buy signal and sells the full available BTC quantity on each sell signal.
 
 ## Live Bot
 

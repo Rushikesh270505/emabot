@@ -224,8 +224,8 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
                 <strong>100,000 USDT</strong>
               </div>
               <div className="status-item">
-                <span>Risk</span>
-                <strong>1% / trade</strong>
+                <span>Allocation</span>
+                <strong>Full balance</strong>
               </div>
             </div>
           </aside>

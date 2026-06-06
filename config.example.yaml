@@ -14,7 +14,6 @@ trading:
   dry_run: true
 
 risk:
-  risk_per_trade: 0.01
   swing_lookback: 10
   stop_buffer_pct: 0.001
   use_trailing_stop: true

@@ -9,8 +9,6 @@ from .indicators import add_indicators
 from .logger import TradeLogger
 from .models import Position, SignalType
 from .risk import (
-    calculate_position_size,
-    cap_position_by_cash,
     recent_swing_low,
     update_ema_trailing_stop,
 )
@@ -104,23 +102,12 @@ def run_backtest(config_path: str, symbol: str) -> BacktestResult:
             lookback=int(raw["risk"]["swing_lookback"]),
             buffer_pct=float(raw["risk"].get("stop_buffer_pct", 0.0)),
         )
-        amount = calculate_position_size(
-            balance=balance,
-            risk_per_trade=float(raw["risk"]["risk_per_trade"]),
-            entry_price=close,
-            stop_loss=stop_loss,
-        )
-        amount = cap_position_by_cash(amount, balance, close)
+        amount = balance / (close * (1 + fee_rate))
         if amount <= 0:
             continue
 
         cost = amount * close
         fee = cost * fee_rate
-        if cost + fee > balance:
-            amount = balance / (close * (1 + fee_rate))
-            cost = amount * close
-            fee = cost * fee_rate
-
         balance -= cost + fee
         position = Position(
             symbol=symbol,

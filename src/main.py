@@ -14,8 +14,6 @@ from .logger import TradeLogger
 from .models import Position, SignalType
 from .notifications import TelegramNotifier
 from .risk import (
-    calculate_position_size,
-    cap_position_by_cash,
     recent_swing_low,
     update_ema_trailing_stop,
 )
@@ -93,7 +91,11 @@ def _process_symbol(
 
         signal = evaluate_exit(df, position)
         if signal.type == SignalType.SELL:
-            amount = exchange.amount_to_precision(symbol, position.amount)
+            amount = position.amount if config.dry_run else exchange.fetch_free_balance(_base_currency(symbol))
+            amount = exchange.amount_to_precision(symbol, amount)
+            if amount <= 0:
+                logging.info("Skipping %s sell because available base balance is zero", symbol)
+                return positions
             order = exchange.create_market_sell(symbol, amount, config.dry_run, close)
             balance = exchange.fetch_quote_balance(raw["trading"]["quote_currency"]) if not config.dry_run else ""
             trade_logger.log(
@@ -145,13 +147,7 @@ def _process_symbol(
         lookback=int(raw["risk"]["swing_lookback"]),
         buffer_pct=float(raw["risk"].get("stop_buffer_pct", 0.0)),
     )
-    amount = calculate_position_size(
-        balance=balance,
-        risk_per_trade=float(raw["risk"]["risk_per_trade"]),
-        entry_price=close,
-        stop_loss=stop_loss,
-    )
-    amount = cap_position_by_cash(amount, balance, close)
+    amount = balance / close
     amount = exchange.amount_to_precision(symbol, amount)
     if amount <= 0:
         logging.info("Skipping %s because calculated amount is zero after precision rules", symbol)
@@ -269,6 +265,7 @@ def _trade_alert_payload(
             "stop_loss": stop_loss,
             "take_profit": take_profit,
         },
+        "allocation": "full_balance",
         "dry_run": dry_run,
     }
 
@@ -279,6 +276,11 @@ def _exit_event(reason: str) -> str:
     if "stop loss" in normalized:
         return "STOP_LOSS"
     return "SELL"
+
+
+def _base_currency(symbol: str) -> str:
+    """Return the base asset from a ccxt symbol like BTC/USDT."""
+    return symbol.split("/", maxsplit=1)[0]
 
 
 if __name__ == "__main__":

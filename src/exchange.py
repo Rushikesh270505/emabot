@@ -35,13 +35,16 @@ class BinanceSpotExchange:
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         return df
 
-    def fetch_quote_balance(self, quote_currency: str) -> float:
+    def fetch_free_balance(self, currency: str) -> float:
         try:
             balance = self.exchange.fetch_balance()
-            return float(balance.get("free", {}).get(quote_currency, 0.0))
+            return float(balance.get("free", {}).get(currency, 0.0))
         except ccxt.BaseError as exc:
             logging.exception("Failed to fetch balance: %s", exc)
             raise
+
+    def fetch_quote_balance(self, quote_currency: str) -> float:
+        return self.fetch_free_balance(quote_currency)
 
     def amount_to_precision(self, symbol: str, amount: float) -> float:
         return float(self.exchange.amount_to_precision(symbol, amount))
