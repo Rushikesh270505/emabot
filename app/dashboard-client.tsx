@@ -5,11 +5,14 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Bitcoin,
+  BarChart3,
   CheckCircle2,
   CircleAlert,
-  Clock3,
+  History,
+  ListChecks,
   RefreshCw,
   ShieldCheck,
+  Table2,
   Wallet,
   XCircle
 } from "lucide-react";
@@ -18,6 +21,14 @@ import { formatNumber, formatUsd, type StrategySnapshot } from "@/lib/market";
 import { StrategyChart } from "./strategy-chart";
 
 type StreamStatus = "connecting" | "live" | "polling";
+type DashboardTab = "chart" | "strategy" | "history" | "account";
+
+const TABS: Array<{ id: DashboardTab; label: string; icon: ReactNode }> = [
+  { id: "chart", label: "Chart", icon: <BarChart3 size={16} /> },
+  { id: "strategy", label: "Strategy", icon: <ListChecks size={16} /> },
+  { id: "history", label: "Trade History", icon: <History size={16} /> },
+  { id: "account", label: "Account", icon: <Wallet size={16} /> }
+];
 
 export function DashboardClient({ initialMarket }: { initialMarket: StrategySnapshot }) {
   const [market, setMarket] = useState(initialMarket);
@@ -25,6 +36,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("connecting");
+  const [activeTab, setActiveTab] = useState<DashboardTab>("chart");
 
   useEffect(() => {
     let cancelled = false;
@@ -167,96 +179,41 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
       </header>
 
       <section className="dashboard">
-        <div className="hero">
-          <section className="market-panel">
-            <div className="pair-row">
-              <div className="pair">
-                <div className="coin">B</div>
-                <div>
-                  <h2>{market.symbol}</h2>
-                  <p>{market.source} spot · live ticker plus 15m closed candles</p>
-                </div>
-              </div>
-              <span className="pill">
-                <Clock3 size={15} />
-                {new Date(market.updatedAt).toLocaleTimeString()}
-              </span>
-            </div>
-
-            <p className="price">{formatUsd(market.price)}</p>
-
-            <div className="signal-row">
+        <section className="terminal">
+          <div className="ticker-strip">
+            <div className="pair">
+              <div className="coin">B</div>
               <div>
-                <span className={`signal ${signalClass}`}>
-                  {market.signal === "BUY" && <ArrowUpRight size={18} />}
-                  {market.signal === "SELL" && <ArrowDownRight size={18} />}
-                  {market.signal === "HOLD" && <CircleAlert size={18} />}
-                  {market.signal}
-                </span>
-                <p className="signal-copy">{market.reason}</p>
-              </div>
-              <div className="market-pills">
-                <span className={`pill stream ${streamStatus}`}>
-                  <span />
-                  {streamStatus === "live" ? "WebSocket live" : streamStatus === "connecting" ? "Connecting" : "Polling fallback"}
-                </span>
-                <span className={`pill ${changeIsPositive ? "ok" : "no"}`}>
-                  {changeIsPositive ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
-                  {market.changePct.toFixed(2)}% · 24h
-                </span>
+                <h2>{market.symbol}</h2>
+                <p>{market.source} spot · 15m</p>
               </div>
             </div>
-          </section>
-
-          <aside className="status">
-            <div>
-              <h3>Bot Scope</h3>
-              <p>One pair, one timeframe, spot only.</p>
+            <div className="ticker-price">
+              <span>Last Price</span>
+              <strong>{formatUsd(market.price)}</strong>
             </div>
-            <div className="status-list">
-              <div className="status-item">
-                <span>Symbol</span>
-                <strong>BTC/USDT</strong>
-              </div>
-              <div className="status-item">
-                <span>Timeframe</span>
-                <strong>15m</strong>
-              </div>
-              <div className="status-item">
-                <span>Data Source</span>
-                <strong>{market.source}</strong>
-              </div>
-              <div className="status-item">
-                <span>Capital</span>
-                <strong>100,000 USDT</strong>
-              </div>
-              <div className="status-item">
-                <span>Allocation</span>
-                <strong>Full balance</strong>
-              </div>
-            </div>
-          </aside>
-        </div>
-
-        <section className="wallet-panel">
-          <div className="wallet-head">
-            <div>
-              <span className="eyebrow">Virtual Wallet</span>
-              <h3>Strategy Performance</h3>
-            </div>
-            <span className={`pill ${market.portfolio.inPosition ? "ok" : ""}`}>
-              <Wallet size={15} />
-              {market.portfolio.inPosition ? "In BTC trade" : "Holding USDT"}
-            </span>
-          </div>
-          <div className="wallet-grid">
-            <Metric label="Initial Capital" value={`${formatUsd(market.portfolio.initialCapital)} USDT`} />
+            <Metric label="24h Change" value={`${market.changePct.toFixed(2)}%`} tone={changeIsPositive ? "positive" : "negative"} />
             <Metric label="Current Value" value={`${formatUsd(market.portfolio.currentValue)} USDT`} />
             <Metric
               label="Profit / Loss"
               value={`${formatSignedUsd(market.portfolio.profitLoss)} (${formatSignedPct(market.portfolio.profitLossPct)})`}
               tone={pnlIsPositive ? "positive" : "negative"}
             />
+            <div className="ticker-status">
+              <span className={`signal ${signalClass}`}>
+                {market.signal === "BUY" && <ArrowUpRight size={18} />}
+                {market.signal === "SELL" && <ArrowDownRight size={18} />}
+                {market.signal === "HOLD" && <CircleAlert size={18} />}
+                {market.signal}
+              </span>
+              <span className={`pill stream ${streamStatus}`}>
+                <span />
+                {streamStatus === "live" ? "Live" : streamStatus === "connecting" ? "Connecting" : "Polling"}
+              </span>
+            </div>
+          </div>
+
+          <div className="account-strip">
             <Metric label="USDT Balance" value={`${formatUsd(market.portfolio.cash)} USDT`} />
             <Metric label="BTC Position" value={`${formatNumber(market.portfolio.btcAmount, 8)} BTC`} />
             <Metric
@@ -264,71 +221,119 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
               value={formatSignedUsd(market.portfolio.unrealizedProfitLoss)}
               tone={market.portfolio.unrealizedProfitLoss >= 0 ? "positive" : "negative"}
             />
-          </div>
-          <div className="wallet-foot">
-            <span>
-              Entry: {market.portfolio.entryPrice ? formatUsd(market.portfolio.entryPrice) : "-"}
+            <Metric label="Realized PnL" value={formatSignedUsd(market.portfolio.realizedProfitLoss)} tone={market.portfolio.realizedProfitLoss >= 0 ? "positive" : "negative"} />
+            <Metric label="Entry" value={market.portfolio.entryPrice ? formatUsd(market.portfolio.entryPrice) : "-"} />
+            <span className={`position-badge ${market.portfolio.inPosition ? "active" : ""}`}>
+              {market.portfolio.inPosition ? "In Position" : "No Position"}
             </span>
-            <span>
-              Last trade:{" "}
-              {market.portfolio.lastTrade
-                ? `${market.portfolio.lastTrade.side} ${formatNumber(market.portfolio.lastTrade.amount, 8)} BTC @ ${formatUsd(
-                    market.portfolio.lastTrade.price
-                  )}`
-                : "-"}
-            </span>
-            <span>Trades: {market.portfolio.totalTrades}</span>
           </div>
-        </section>
 
-        <StrategyChart candles={chartCandles} isLoadingOlder={isLoadingOlder} onLoadOlder={loadOlderCandles} />
+          <nav className="tabs" aria-label="Dashboard sections">
+            {TABS.map((tab) => (
+              <button
+                className={activeTab === tab.id ? "active" : ""}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                type="button"
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </nav>
 
-        <section className="grid compact-grid">
-          <InfoCard title="Trend Filters" icon={<Activity size={18} />}>
-            <div className="metric-grid">
-              <Metric label="EMA 9" value={formatUsdValue(market.latest.ema9)} />
-              <Metric label="EMA 21" value={formatUsdValue(market.latest.ema21)} />
-              <Metric label="EMA 200" value={formatUsdValue(market.latest.ema200)} />
-            </div>
-          </InfoCard>
+          <section className="tab-body">
+            {activeTab === "chart" && (
+              <StrategyChart candles={chartCandles} isLoadingOlder={isLoadingOlder} onLoadOlder={loadOlderCandles} />
+            )}
 
-          <InfoCard title="Momentum" icon={<ShieldCheck size={18} />}>
-            <div className="metric-grid">
-              <Metric label="RSI 14" value={formatNumber(market.latest.rsi14, 1)} />
-              <Metric label="Volume" value={formatNumber(market.latest.volume, 2)} />
-              <Metric label="Vol SMA 20" value={formatNumber(market.latest.volumeSma20, 2)} />
-            </div>
-          </InfoCard>
-        </section>
+            {activeTab === "strategy" && (
+              <div className="panel-grid">
+                <InfoCard title="Trend Filters" icon={<Activity size={18} />}>
+                  <div className="metric-grid">
+                    <Metric label="EMA 9" value={formatUsdValue(market.latest.ema9)} />
+                    <Metric label="EMA 21" value={formatUsdValue(market.latest.ema21)} />
+                    <Metric label="EMA 200" value={formatUsdValue(market.latest.ema200)} />
+                  </div>
+                </InfoCard>
 
-        <section className="grid compact-grid">
-          <InfoCard title="Entry Checklist" icon={<CheckCircle2 size={18} />}>
-            <div className="checklist">
-              {market.conditions.map((condition) => (
-                <div className="check" key={condition.label}>
-                  {condition.passed ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="no" size={18} />}
-                  <span>{condition.label}</span>
-                </div>
-              ))}
-            </div>
-          </InfoCard>
+                <InfoCard title="Momentum" icon={<ShieldCheck size={18} />}>
+                  <div className="metric-grid">
+                    <Metric label="RSI 14" value={formatNumber(market.latest.rsi14, 1)} />
+                    <Metric label="Volume" value={formatNumber(market.latest.volume, 2)} />
+                    <Metric label="Vol SMA 20" value={formatNumber(market.latest.volumeSma20, 2)} />
+                  </div>
+                </InfoCard>
 
-          <InfoCard title="Exit Rules" icon={<ArrowDownRight size={18} />}>
-            <div className="checklist">
-              <div className="check">
-                <CircleAlert className="muted" size={18} />
-                <span>EMA 9 crosses below EMA 21</span>
+                <InfoCard title="Entry Checklist" icon={<CheckCircle2 size={18} />}>
+                  <div className="checklist">
+                    {market.conditions.map((condition) => (
+                      <div className="check" key={condition.label}>
+                        {condition.passed ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="no" size={18} />}
+                        <span>{condition.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </InfoCard>
+
+                <InfoCard title="Exit Rules" icon={<ArrowDownRight size={18} />}>
+                  <div className="checklist">
+                    <div className="check">
+                      <CircleAlert className="muted" size={18} />
+                      <span>EMA 9 crosses below EMA 21</span>
+                    </div>
+                    <div className="check">
+                      <CircleAlert className="muted" size={18} />
+                      <span>RSI 14 falls below 45</span>
+                    </div>
+                    <div className="check">
+                      <CircleAlert className="muted" size={18} />
+                      <span>Stop loss or EMA 21 trailing stop</span>
+                    </div>
+                  </div>
+                </InfoCard>
               </div>
-              <div className="check">
-                <CircleAlert className="muted" size={18} />
-                <span>RSI 14 falls below 45</span>
+            )}
+
+            {activeTab === "history" && (
+              <InfoCard title="Trade History" icon={<Table2 size={18} />}>
+                <TradeHistory market={market} />
+              </InfoCard>
+            )}
+
+            {activeTab === "account" && (
+              <div className="panel-grid account-panel">
+                <InfoCard title="Balances" icon={<Wallet size={18} />}>
+                  <div className="metric-grid">
+                    <Metric label="Initial Capital" value={`${formatUsd(market.portfolio.initialCapital)} USDT`} />
+                    <Metric label="Current Value" value={`${formatUsd(market.portfolio.currentValue)} USDT`} />
+                    <Metric label="Total Trades" value={String(market.portfolio.totalTrades)} />
+                  </div>
+                </InfoCard>
+
+                <InfoCard title="Latest Trade" icon={<History size={18} />}>
+                  <div className="status-list">
+                    <div className="status-item">
+                      <span>Last Trade</span>
+                      <strong>
+                        {market.portfolio.lastTrade
+                          ? `${market.portfolio.lastTrade.side} @ ${formatUsd(market.portfolio.lastTrade.price)}`
+                          : "-"}
+                      </strong>
+                    </div>
+                    <div className="status-item">
+                      <span>Updated</span>
+                      <strong>{new Date(market.updatedAt).toLocaleTimeString()}</strong>
+                    </div>
+                    <div className="status-item">
+                      <span>Allocation</span>
+                      <strong>Full balance</strong>
+                    </div>
+                  </div>
+                </InfoCard>
               </div>
-              <div className="check">
-                <CircleAlert className="muted" size={18} />
-                <span>Stop loss or EMA 21 trailing stop</span>
-              </div>
-            </div>
-          </InfoCard>
+            )}
+          </section>
         </section>
       </section>
     </main>
@@ -360,6 +365,45 @@ function Metric({ label, value, tone }: { label: string; value: string; tone?: "
     <div className={`metric ${tone ?? ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function TradeHistory({ market }: { market: StrategySnapshot }) {
+  if (market.portfolio.trades.length === 0) {
+    return <p className="empty-state">No simulated trades yet.</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table className="trade-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Side</th>
+            <th>Price</th>
+            <th>Amount</th>
+            <th>Value</th>
+            <th>PnL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...market.portfolio.trades].reverse().map((trade) => (
+            <tr key={`${trade.timestamp}-${trade.side}-${trade.price}`}>
+              <td>{new Date(trade.timestamp).toLocaleString()}</td>
+              <td>
+                <span className={`side ${trade.side.toLowerCase()}`}>{trade.side}</span>
+              </td>
+              <td>{formatUsd(trade.price)}</td>
+              <td>{formatNumber(trade.amount, 8)}</td>
+              <td>{formatUsd(trade.value)}</td>
+              <td className={trade.profitLoss === undefined ? "" : trade.profitLoss >= 0 ? "positive-text" : "negative-text"}>
+                {trade.profitLoss === undefined ? "-" : `${formatSignedUsd(trade.profitLoss)} (${formatSignedPct(trade.profitLossPct ?? 0)})`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -35,11 +35,7 @@ input {
 
 .shell {
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(61, 220, 151, 0.08), transparent 32rem),
-    radial-gradient(circle at 88% 4%, rgba(106, 168, 255, 0.18), transparent 28rem),
-    radial-gradient(circle at 8% 18%, rgba(246, 196, 83, 0.08), transparent 22rem),
-    var(--background);
+  background: var(--background);
 }
 
 .topbar {
@@ -160,18 +156,11 @@ input {
   color: var(--muted);
 }
 
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
-  gap: 1rem;
-  align-items: stretch;
-  margin-bottom: 1rem;
-}
-
 .market-panel,
 .status,
 .card,
 .wallet-panel,
+.terminal,
 .chart-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -179,6 +168,116 @@ input {
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
     rgba(16, 21, 27, 0.9);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.26);
+}
+
+.terminal {
+  overflow: hidden;
+  background: rgba(16, 21, 27, 0.94);
+}
+
+.ticker-strip,
+.account-strip {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ticker-strip {
+  grid-template-columns: minmax(170px, 1fr) minmax(170px, 1.1fr) repeat(3, minmax(120px, 0.7fr)) minmax(150px, 0.9fr);
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.account-strip {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.ticker-price span,
+.ticker-strip .metric span,
+.account-strip .metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.ticker-price strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: clamp(1.55rem, 3vw, 2.35rem);
+  line-height: 1;
+}
+
+.ticker-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.position-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.position-badge.active {
+  border-color: rgba(61, 220, 151, 0.35);
+  color: var(--green);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 3rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tabs button.active {
+  border-bottom-color: var(--amber);
+  color: var(--text);
+}
+
+.tab-body {
+  padding: 1rem;
+}
+
+.tab-body .chart-panel {
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
 
 .wallet-panel {
@@ -478,6 +577,66 @@ input {
   margin-bottom: 1rem;
 }
 
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.trade-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.trade-table th,
+.trade-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.trade-table th {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.side {
+  display: inline-flex;
+  min-width: 3.25rem;
+  justify-content: center;
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.side.buy {
+  background: rgba(61, 220, 151, 0.14);
+  color: var(--green);
+}
+
+.side.sell {
+  background: rgba(255, 92, 122, 0.14);
+  color: var(--red);
+}
+
+.positive-text {
+  color: var(--green);
+}
+
+.negative-text {
+  color: var(--red);
+}
+
+.empty-state {
+  margin: 1rem 0 0;
+  color: var(--muted);
+}
+
 .compact-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -535,10 +694,12 @@ input {
 }
 
 @media (max-width: 860px) {
-  .hero,
   .grid,
   .wallet-grid,
-  .chart-stats {
+  .chart-stats,
+  .ticker-strip,
+  .account-strip,
+  .panel-grid {
     grid-template-columns: 1fr;
   }
 
@@ -563,10 +724,15 @@ input {
   .button {
     flex: 1;
   }
+
+  .ticker-status {
+    justify-content: flex-start;
+  }
 }
 
 @media (min-width: 861px) and (max-width: 1100px) {
-  .wallet-grid {
+  .ticker-strip,
+  .account-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
