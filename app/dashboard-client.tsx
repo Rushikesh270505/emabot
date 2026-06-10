@@ -10,6 +10,7 @@ import {
   Clock3,
   RefreshCw,
   ShieldCheck,
+  Wallet,
   XCircle
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -48,7 +49,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
     }
 
     refreshMarket();
-    const interval = window.setInterval(refreshMarket, 10000);
+    const interval = window.setInterval(refreshMarket, 3000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -60,11 +61,15 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
     let reconnectTimer: number | undefined;
     let closedByComponent = false;
 
-    function connectTickerStream() {
+    function connectTickerStream(streamIndex = 0) {
       setStreamStatus("connecting");
-      const streamUrl = market.source === "Binance US"
-        ? "wss://stream.binance.us:9443/ws/btcusdt@ticker"
-        : "wss://stream.binance.com:9443/ws/btcusdt@ticker";
+      const streamUrls = [
+        "wss://stream.binance.com:9443/ws/btcusdt@trade",
+        "wss://stream.binance.com:9443/ws/btcusdt@ticker",
+        "wss://stream.binance.us:9443/ws/btcusdt@trade",
+        "wss://stream.binance.us:9443/ws/btcusdt@ticker"
+      ];
+      const streamUrl = streamUrls[streamIndex] ?? streamUrls[0];
       socket = new WebSocket(streamUrl);
 
       socket.onopen = () => {
@@ -72,8 +77,8 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
       };
 
       socket.onmessage = (event) => {
-        const ticker = JSON.parse(event.data) as { c?: string; P?: string; E?: number };
-        const price = Number(ticker.c);
+        const ticker = JSON.parse(event.data) as { c?: string; p?: string; P?: string; E?: number; T?: number };
+        const price = Number(ticker.p ?? ticker.c);
         const changePct = Number(ticker.P);
         if (!Number.isFinite(price)) {
           return;
@@ -82,7 +87,8 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
           ...current,
           price,
           changePct: Number.isFinite(changePct) ? changePct : current.changePct,
-          updatedAt: new Date(ticker.E ?? Date.now()).toISOString()
+          updatedAt: new Date(ticker.E ?? ticker.T ?? Date.now()).toISOString(),
+          portfolio: markPortfolioToMarket(current, price)
         }));
       };
 
@@ -95,7 +101,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
           return;
         }
         setStreamStatus("polling");
-        reconnectTimer = window.setTimeout(connectTickerStream, 5000);
+        reconnectTimer = window.setTimeout(() => connectTickerStream((streamIndex + 1) % streamUrls.length), 2500);
       };
     }
 
@@ -112,6 +118,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
 
   const signalClass = market.signal.toLowerCase();
   const changeIsPositive = market.changePct >= 0;
+  const pnlIsPositive = market.portfolio.profitLoss >= 0;
 
   async function loadOlderCandles() {
     if (isLoadingOlder || chartCandles.length === 0) {
@@ -231,6 +238,49 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
           </aside>
         </div>
 
+        <section className="wallet-panel">
+          <div className="wallet-head">
+            <div>
+              <span className="eyebrow">Virtual Wallet</span>
+              <h3>Strategy Performance</h3>
+            </div>
+            <span className={`pill ${market.portfolio.inPosition ? "ok" : ""}`}>
+              <Wallet size={15} />
+              {market.portfolio.inPosition ? "In BTC trade" : "Holding USDT"}
+            </span>
+          </div>
+          <div className="wallet-grid">
+            <Metric label="Initial Capital" value={`${formatUsd(market.portfolio.initialCapital)} USDT`} />
+            <Metric label="Current Value" value={`${formatUsd(market.portfolio.currentValue)} USDT`} />
+            <Metric
+              label="Profit / Loss"
+              value={`${formatSignedUsd(market.portfolio.profitLoss)} (${formatSignedPct(market.portfolio.profitLossPct)})`}
+              tone={pnlIsPositive ? "positive" : "negative"}
+            />
+            <Metric label="USDT Balance" value={`${formatUsd(market.portfolio.cash)} USDT`} />
+            <Metric label="BTC Position" value={`${formatNumber(market.portfolio.btcAmount, 8)} BTC`} />
+            <Metric
+              label="Open PnL"
+              value={formatSignedUsd(market.portfolio.unrealizedProfitLoss)}
+              tone={market.portfolio.unrealizedProfitLoss >= 0 ? "positive" : "negative"}
+            />
+          </div>
+          <div className="wallet-foot">
+            <span>
+              Entry: {market.portfolio.entryPrice ? formatUsd(market.portfolio.entryPrice) : "-"}
+            </span>
+            <span>
+              Last trade:{" "}
+              {market.portfolio.lastTrade
+                ? `${market.portfolio.lastTrade.side} ${formatNumber(market.portfolio.lastTrade.amount, 8)} BTC @ ${formatUsd(
+                    market.portfolio.lastTrade.price
+                  )}`
+                : "-"}
+            </span>
+            <span>Trades: {market.portfolio.totalTrades}</span>
+          </div>
+        </section>
+
         <StrategyChart candles={chartCandles} isLoadingOlder={isLoadingOlder} onLoadOlder={loadOlderCandles} />
 
         <section className="grid compact-grid">
@@ -305,9 +355,9 @@ function InfoCard({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, tone }: { label: string; value: string; tone?: "positive" | "negative" }) {
   return (
-    <div className="metric">
+    <div className={`metric ${tone ?? ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -326,4 +376,29 @@ function mergeCandles<T extends { timestamp: string }>(left: T[], right: T[]): T
   return Array.from(byTimestamp.values()).sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
+}
+
+function markPortfolioToMarket(market: StrategySnapshot, price: number) {
+  const currentValue = market.portfolio.cash + market.portfolio.btcAmount * price;
+  const profitLoss = currentValue - market.portfolio.initialCapital;
+  const unrealizedProfitLoss =
+    market.portfolio.btcAmount > 0 ? market.portfolio.btcAmount * price - market.portfolio.positionCost : 0;
+
+  return {
+    ...market.portfolio,
+    currentValue,
+    profitLoss,
+    profitLossPct: market.portfolio.initialCapital > 0 ? (profitLoss / market.portfolio.initialCapital) * 100 : 0,
+    unrealizedProfitLoss
+  };
+}
+
+function formatSignedUsd(value: number) {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatUsd(value)}`;
+}
+
+function formatSignedPct(value: number) {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
 }

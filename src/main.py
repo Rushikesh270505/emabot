@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import time
@@ -44,21 +46,34 @@ def run_bot(config_path: str) -> None:
     trade_logger = TradeLogger(raw["storage"]["trade_log_csv"])
     state = StateStore(raw["storage"]["state_file"])
     positions = state.load_positions()
+    quote_balance = state.load_quote_balance(float(raw["backtest"]["starting_balance"]))
 
     logging.info("Starting bot for %s. dry_run=%s", ", ".join(config.symbols), config.dry_run)
-    notifier.send(f"Bot started. dry_run={config.dry_run}")
+    notifier.send("ema bot started")
+    last_balance_notification = 0.0
 
     while True:
         for symbol in config.symbols:
             try:
-                positions = _process_symbol(symbol, config, exchange, trade_logger, notifier, positions)
-                state.save_positions(positions)
+                positions, quote_balance = _process_symbol(
+                    symbol,
+                    config,
+                    exchange,
+                    trade_logger,
+                    notifier,
+                    positions,
+                    quote_balance,
+                )
+                state.save_state(positions, quote_balance if config.dry_run else None)
             except (ccxt.BaseError, ValueError, KeyError) as exc:
                 logging.exception("Processing failed for %s: %s", symbol, exc)
                 notifier.send(f"API/processing error for {symbol}: {exc}")
             except Exception as exc:
                 logging.exception("Unexpected error for %s: %s", symbol, exc)
                 notifier.send(f"Unexpected error for {symbol}: {exc}")
+        if time.time() - last_balance_notification >= 600:
+            _send_balance_update(config, exchange, notifier, positions, quote_balance)
+            last_balance_notification = time.time()
         time.sleep(int(raw["trading"].get("poll_seconds", 60)))
 
 
@@ -69,7 +84,8 @@ def _process_symbol(
     trade_logger: TradeLogger,
     notifier: TelegramNotifier,
     positions: dict[str, Position],
-) -> dict[str, Position]:
+    quote_balance: float,
+) -> tuple[dict[str, Position], float]:
     raw = config.raw
     df = exchange.fetch_ohlcv(
         symbol=symbol,
@@ -95,9 +111,21 @@ def _process_symbol(
             amount = exchange.amount_to_precision(symbol, amount)
             if amount <= 0:
                 logging.info("Skipping %s sell because available base balance is zero", symbol)
-                return positions
+                return positions, quote_balance
             order = exchange.create_market_sell(symbol, amount, config.dry_run, close)
-            balance = exchange.fetch_quote_balance(raw["trading"]["quote_currency"]) if not config.dry_run else ""
+            if config.dry_run:
+                proceeds = order.amount * order.price
+                quote_balance += proceeds
+                balance: float | str = quote_balance
+            else:
+                balance = exchange.fetch_quote_balance(raw["trading"]["quote_currency"])
+            profit = _profit_payload(position.entry_price, order.price, order.amount)
+            del positions[symbol]
+            account = _account_payload(
+                float(raw["backtest"]["starting_balance"]),
+                float(balance),
+                {},
+            )
             trade_logger.log(
                 {
                     "timestamp": timestamp,
@@ -127,21 +155,22 @@ def _process_symbol(
                     balance=balance,
                     stop_loss=position.stop_loss,
                     take_profit=None,
+                    profit=profit,
+                    account=account,
                     dry_run=config.dry_run,
                 )
             )
-            del positions[symbol]
-        return positions
+        return positions, quote_balance
 
     if len(positions) >= int(raw["trading"].get("max_open_positions", len(config.symbols))):
-        return positions
+        return positions, quote_balance
 
     signal = evaluate_entry(df)
     if signal.type != SignalType.BUY:
-        return positions
+        return positions, quote_balance
 
     quote_currency = raw["trading"]["quote_currency"]
-    balance = float(raw["backtest"]["starting_balance"]) if config.dry_run else exchange.fetch_quote_balance(quote_currency)
+    balance = quote_balance if config.dry_run else exchange.fetch_quote_balance(quote_currency)
     stop_loss = recent_swing_low(
         df,
         lookback=int(raw["risk"]["swing_lookback"]),
@@ -151,10 +180,13 @@ def _process_symbol(
     amount = exchange.amount_to_precision(symbol, amount)
     if amount <= 0:
         logging.info("Skipping %s because calculated amount is zero after precision rules", symbol)
-        return positions
+        return positions, quote_balance
 
     stop_loss = exchange.price_to_precision(symbol, stop_loss)
     order = exchange.create_market_buy(symbol, amount, config.dry_run, close)
+    if config.dry_run:
+        quote_balance = max(0.0, quote_balance - order.amount * order.price)
+        balance = quote_balance
 
     positions[symbol] = Position(
         symbol=symbol,
@@ -164,6 +196,17 @@ def _process_symbol(
         opened_at=datetime.now(timezone.utc).isoformat(),
         take_profit=None,
         trailing_stop=None,
+    )
+    account = _account_payload(
+        float(raw["backtest"]["starting_balance"]),
+        float(balance),
+        {
+            symbol: {
+                "amount": order.amount,
+                "entry_price": order.price,
+                "current_price": close,
+            }
+        },
     )
     trade_logger.log(
         {
@@ -194,10 +237,58 @@ def _process_symbol(
             balance=balance,
             stop_loss=stop_loss,
             take_profit=None,
+            account=account,
             dry_run=config.dry_run,
         )
     )
-    return positions
+    return positions, quote_balance
+
+
+def _send_balance_update(
+    config,
+    exchange: BinanceSpotExchange,
+    notifier: TelegramNotifier,
+    positions: dict[str, Position],
+    dry_run_quote_balance: float,
+) -> None:
+    """Send periodic account balance state to Telegram."""
+    raw = config.raw
+    quote_currency = raw["trading"]["quote_currency"]
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    if config.dry_run:
+        quote_balance: float | str = dry_run_quote_balance
+        base_balances = {
+            position.symbol: {
+                "amount": position.amount,
+                "entry_price": position.entry_price,
+                "current_price": _latest_close(exchange, position.symbol, config.timeframe),
+            }
+            for position in positions.values()
+        }
+    else:
+        quote_balance = exchange.fetch_quote_balance(quote_currency)
+        base_balances = {
+            symbol: {
+                "amount": exchange.fetch_free_balance(_base_currency(symbol)),
+                "entry_price": position.entry_price,
+                "current_price": _latest_close(exchange, symbol, config.timeframe),
+            }
+            for symbol, position in positions.items()
+        }
+    account = _account_payload(float(raw["backtest"]["starting_balance"]), float(quote_balance), base_balances)
+
+    notifier.send_json(
+        {
+            "event": "BALANCE_UPDATE",
+            "timestamp": timestamp,
+            "quote_currency": quote_currency,
+            "quote_balance": quote_balance,
+            "positions": base_balances,
+            "account": account,
+            "dry_run": config.dry_run,
+        }
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -246,6 +337,8 @@ def _trade_alert_payload(
     stop_loss: float,
     take_profit: float | None,
     dry_run: bool,
+    profit: dict[str, float] | None = None,
+    account: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create consistent JSON alert bodies for Telegram trade events."""
     return {
@@ -265,6 +358,8 @@ def _trade_alert_payload(
             "stop_loss": stop_loss,
             "take_profit": take_profit,
         },
+        "profit": profit,
+        "account": account,
         "allocation": "full_balance",
         "dry_run": dry_run,
     }
@@ -281,6 +376,73 @@ def _exit_event(reason: str) -> str:
 def _base_currency(symbol: str) -> str:
     """Return the base asset from a ccxt symbol like BTC/USDT."""
     return symbol.split("/", maxsplit=1)[0]
+
+
+def _latest_close(exchange: BinanceSpotExchange, symbol: str, timeframe: str) -> float:
+    """Fetch the latest available close for wallet mark-to-market updates."""
+    df = exchange.fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=2)
+    return float(df.iloc[-1]["close"])
+
+
+def _account_payload(
+    initial_capital: float,
+    quote_balance: float,
+    positions: dict[str, dict[str, float]],
+) -> dict[str, Any]:
+    """Create a wallet-style mark-to-market account summary."""
+    position_values: dict[str, dict[str, float]] = {}
+    total_position_value = 0.0
+    unrealized_profit_loss = 0.0
+
+    for symbol, position in positions.items():
+        amount = float(position["amount"])
+        entry_price = float(position["entry_price"])
+        current_price = float(position["current_price"])
+        current_value = amount * current_price
+        cost_basis = amount * entry_price
+        position_profit_loss = current_value - cost_basis
+        position_profit_loss_pct = (position_profit_loss / cost_basis) * 100 if cost_basis else 0.0
+        total_position_value += current_value
+        unrealized_profit_loss += position_profit_loss
+        position_values[symbol] = {
+            "amount": amount,
+            "entry_price": entry_price,
+            "current_price": current_price,
+            "cost_basis": cost_basis,
+            "current_value": current_value,
+            "unrealized_profit_loss": position_profit_loss,
+            "unrealized_profit_loss_pct": position_profit_loss_pct,
+        }
+
+    current_value = quote_balance + total_position_value
+    profit_loss = current_value - initial_capital
+    profit_loss_pct = (profit_loss / initial_capital) * 100 if initial_capital else 0.0
+    realized_profit_loss = profit_loss - unrealized_profit_loss
+
+    return {
+        "initial_capital": initial_capital,
+        "current_value": current_value,
+        "quote_balance": quote_balance,
+        "position_value": total_position_value,
+        "profit_loss": profit_loss,
+        "profit_loss_pct": profit_loss_pct,
+        "realized_profit_loss": realized_profit_loss,
+        "unrealized_profit_loss": unrealized_profit_loss,
+        "positions": position_values,
+    }
+
+
+def _profit_payload(entry_price: float, exit_price: float, amount: float) -> dict[str, float]:
+    """Calculate realized profit for a completed spot exit before exchange fees."""
+    profit_usdt = (exit_price - entry_price) * amount
+    profit_pct = ((exit_price - entry_price) / entry_price) * 100 if entry_price else 0.0
+    return {
+        "entry_price": entry_price,
+        "exit_price": exit_price,
+        "amount": amount,
+        "profit_usdt_before_fees": profit_usdt,
+        "profit_pct_before_fees": profit_pct,
+    }
 
 
 if __name__ == "__main__":

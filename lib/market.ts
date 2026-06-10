@@ -26,7 +26,37 @@ export type StrategySnapshot = {
   conditions: Array<{ label: string; passed: boolean }>;
   candles: Candle[];
   chartCandles: Candle[];
+  portfolio: PortfolioSnapshot;
 };
+
+export type PortfolioSnapshot = {
+  initialCapital: number;
+  cash: number;
+  btcAmount: number;
+  entryPrice: number | null;
+  positionCost: number;
+  currentValue: number;
+  profitLoss: number;
+  profitLossPct: number;
+  realizedProfitLoss: number;
+  unrealizedProfitLoss: number;
+  inPosition: boolean;
+  lastTrade: SimulatedTrade | null;
+  totalTrades: number;
+  trades: SimulatedTrade[];
+};
+
+export type SimulatedTrade = {
+  timestamp: string;
+  side: "BUY" | "SELL";
+  price: number;
+  amount: number;
+  value: number;
+  profitLoss?: number;
+  profitLossPct?: number;
+};
+
+const INITIAL_CAPITAL = 100000;
 
 export function enrichCandles(candles: Candle[]): Candle[] {
   const closes = candles.map((candle) => candle.close);
@@ -79,6 +109,7 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
 
   const open24h = enriched[Math.max(0, enriched.length - 96)]?.close ?? latest.close;
   const changePct = ((latest.close - open24h) / open24h) * 100;
+  const portfolio = simulatePortfolio(enriched, latest.close);
 
   return {
     symbol: "BTC/USDT",
@@ -93,8 +124,152 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
     previous,
     conditions,
     candles: enriched.slice(-8),
-    chartCandles: enriched.filter((candle) => candle.ema200 !== undefined).slice(-220)
+    chartCandles: enriched.filter((candle) => candle.ema200 !== undefined).slice(-220),
+    portfolio
   };
+}
+
+export function withPortfolioPrice(snapshot: StrategySnapshot, price: number): StrategySnapshot {
+  return {
+    ...snapshot,
+    portfolio: markPortfolioToMarket(snapshot.portfolio, price)
+  };
+}
+
+function simulatePortfolio(candles: Candle[], currentPrice: number): PortfolioSnapshot {
+  let cash = INITIAL_CAPITAL;
+  let btcAmount = 0;
+  let entryPrice: number | null = null;
+  let positionCost = 0;
+  let stopLoss: number | null = null;
+  let trailingStop: number | null = null;
+  let realizedProfitLoss = 0;
+  const trades: SimulatedTrade[] = [];
+
+  for (let index = 201; index < candles.length; index += 1) {
+    const latest = candles[index];
+    const previous = candles[index - 1];
+
+    if (btcAmount > 0 && stopLoss !== null) {
+      const nextTrailingStop = Math.max(trailingStop ?? stopLoss, value(latest.ema21));
+      trailingStop = Math.min(nextTrailingStop, latest.close);
+      stopLoss = Math.max(stopLoss, trailingStop);
+    }
+
+    const signal = evaluateCandleSignal(previous, latest, btcAmount > 0);
+
+    if (signal === "BUY" && btcAmount === 0 && cash > 0) {
+      btcAmount = cash / latest.close;
+      positionCost = cash;
+      entryPrice = latest.close;
+      stopLoss = recentSwingLow(candles.slice(0, index + 1), 10, 0.001);
+      trailingStop = null;
+      trades.push({
+        timestamp: latest.timestamp,
+        side: "BUY",
+        price: latest.close,
+        amount: btcAmount,
+        value: positionCost
+      });
+      cash = 0;
+      continue;
+    }
+
+    const stopExitPrice = stopLoss !== null && latest.low <= stopLoss ? stopLoss : null;
+    const trailingExitPrice = trailingStop !== null && latest.close <= trailingStop ? trailingStop : null;
+    const exitPrice = stopExitPrice ?? trailingExitPrice ?? (signal === "SELL" ? latest.close : null);
+
+    if (exitPrice !== null && btcAmount > 0 && entryPrice !== null) {
+      const exit = closePosition(latest.timestamp, exitPrice, btcAmount, positionCost);
+      cash = exit.cash;
+      realizedProfitLoss += exit.profitLoss;
+      trades.push(exit.trade);
+      btcAmount = 0;
+      entryPrice = null;
+      positionCost = 0;
+      stopLoss = null;
+      trailingStop = null;
+    }
+  }
+
+  return markPortfolioToMarket(
+    {
+      initialCapital: INITIAL_CAPITAL,
+      cash,
+      btcAmount,
+      entryPrice,
+      positionCost,
+      currentValue: cash,
+      profitLoss: cash - INITIAL_CAPITAL,
+      profitLossPct: ((cash - INITIAL_CAPITAL) / INITIAL_CAPITAL) * 100,
+      realizedProfitLoss,
+      unrealizedProfitLoss: 0,
+      inPosition: btcAmount > 0,
+      lastTrade: trades[trades.length - 1] ?? null,
+      totalTrades: trades.length,
+      trades: trades.slice(-12)
+    },
+    currentPrice
+  );
+}
+
+function markPortfolioToMarket(portfolio: PortfolioSnapshot, currentPrice: number): PortfolioSnapshot {
+  const currentValue = portfolio.cash + portfolio.btcAmount * currentPrice;
+  const profitLoss = currentValue - portfolio.initialCapital;
+  const unrealizedProfitLoss =
+    portfolio.btcAmount > 0 ? portfolio.btcAmount * currentPrice - portfolio.positionCost : 0;
+
+  return {
+    ...portfolio,
+    currentValue,
+    profitLoss,
+    profitLossPct: portfolio.initialCapital > 0 ? (profitLoss / portfolio.initialCapital) * 100 : 0,
+    unrealizedProfitLoss
+  };
+}
+
+function evaluateCandleSignal(previous: Candle, latest: Candle, inPosition: boolean): "BUY" | "SELL" | "HOLD" {
+  const crossedUp = value(previous.ema9) <= value(previous.ema21) && value(latest.ema9) > value(latest.ema21);
+  const crossedDown = value(previous.ema9) >= value(previous.ema21) && value(latest.ema9) < value(latest.ema21);
+
+  if (inPosition && (crossedDown || value(latest.rsi14) < 45)) {
+    return "SELL";
+  }
+
+  const buyConditions = [
+    latest.close > value(latest.ema200),
+    crossedUp,
+    value(latest.rsi14) > 55,
+    latest.close > value(latest.ema9) && latest.close > value(latest.ema21),
+    latest.volume > value(latest.volumeSma20)
+  ];
+
+  return buyConditions.every(Boolean) ? "BUY" : "HOLD";
+}
+
+function closePosition(timestamp: string, price: number, amount: number, positionCost: number) {
+  const cash = amount * price;
+  const profitLoss = cash - positionCost;
+  const profitLossPct = positionCost > 0 ? (profitLoss / positionCost) * 100 : 0;
+  return {
+    cash,
+    profitLoss,
+    trade: {
+      timestamp,
+      side: "SELL" as const,
+      price,
+      amount,
+      value: cash,
+      profitLoss,
+      profitLossPct
+    }
+  };
+}
+
+function recentSwingLow(candles: Candle[], lookback: number, bufferPct: number): number {
+  const recent = candles.slice(-lookback);
+  const swingLow = Math.min(...recent.map((candle) => candle.low));
+  return swingLow * (1 - bufferPct);
 }
 
 function ema(values: number[], period: number): Array<number | undefined> {

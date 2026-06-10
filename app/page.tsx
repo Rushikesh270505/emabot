@@ -1,6 +1,6 @@
 import { CircleAlert } from "lucide-react";
 import { DashboardClient } from "./dashboard-client";
-import { buildSnapshot, type Candle, type StrategySnapshot } from "@/lib/market";
+import { buildSnapshot, withPortfolioPrice, type Candle, type StrategySnapshot } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -65,13 +65,13 @@ async function fetchProviderMarket(provider: Provider): Promise<StrategySnapshot
 
   const snapshot = buildSnapshot(candles);
 
-  return {
+  return withPortfolioPrice({
     ...snapshot,
     source: provider.name,
     price: Number(ticker.lastPrice),
     changePct: Number(ticker.priceChangePercent),
     updatedAt: new Date().toISOString()
-  };
+  }, Number(ticker.lastPrice));
 }
 
 function MarketError({ message }: { message: string }) {
