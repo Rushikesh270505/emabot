@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { runBacktest, BacktestResult, SimulatedTrade } from "@/lib/backtest";
+import { runBacktest, BacktestResult, SimulatedTrade } from "../lib/backtest";
 
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot } from "recharts";
 
@@ -13,8 +13,8 @@ interface BacktestPanelProps {
 }
 
 export function BacktestPanel({ market }: BacktestPanelProps) {
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [candles, setCandles] = useState<Array<any>>([]);
@@ -59,11 +59,11 @@ export function BacktestPanel({ market }: BacktestPanelProps) {
       <div className="date-pickers" style={{ display: "flex", gap: "1rem", alignItems: "center", marginBottom: "1rem" }}>
         <label>
           Start:
-          <DatePicker selected={startDate} onChange={(d) => setStartDate(d)} maxDate={endDate || new Date()} dateFormat="yyyy-MM-dd" />
+          <DatePicker selected={startDate} onChange={(d: Date | null) => setStartDate(d ?? undefined)} maxDate={endDate || new Date()} dateFormat="yyyy-MM-dd" />
         </label>
         <label>
           End:
-          <DatePicker selected={endDate} onChange={(d) => setEndDate(d)} minDate={startDate} maxDate={new Date()} dateFormat="yyyy-MM-dd" />
+          <DatePicker selected={endDate} onChange={(d: Date | null) => setEndDate(d ?? undefined)} minDate={startDate} maxDate={new Date()} dateFormat="yyyy-MM-dd" />
         </label>
         <button onClick={handleRun} disabled={!startDate || !endDate || loading} className="button" style={{ padding: "0.5rem 1rem" }}>
           {loading ? "Running..." : "Run Backtest"}

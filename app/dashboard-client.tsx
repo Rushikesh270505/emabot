@@ -18,6 +18,8 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { formatNumber, formatUsd, type StrategySnapshot, markPortfolioToMarket } from "@/lib/market";
 import { StrategyChart } from "./strategy-chart";
+import { ManageApis } from "./components/ManageApis";
+import { Settings } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { BacktestPanel } from "./components/BacktestPanel";
 import Speedometer from "./components/Speedometer";
@@ -30,7 +32,8 @@ const TABS: Array<{ id: DashboardTab; label: string; icon: ReactNode }> = [
   { id: "chart", label: "Chart Info", icon: <BarChart3 size={16} /> },
   { id: "strategy", label: "EMA Filters", icon: <ListChecks size={16} /> },
   { id: "history", label: "Trade History", icon: <History size={16} /> },
-  { id: "backtest", label: "Backtesting", icon: <BarChart3 size={16} /> }
+  { id: "backtest", label: "Backtesting", icon: <BarChart3 size={16} /> },
+  { id: "manage", label: "Manage APIs", icon: <Settings size={16} /> }
 ];
 
 export function DashboardClient({ initialMarket }: { initialMarket: StrategySnapshot }) {
@@ -546,6 +549,25 @@ sendTelegramMessage(`🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.t
                   )}
                   {activeTab === "backtest" && (
                     <BacktestPanel market={market} />
+                  )}
+                  {activeTab === "manage" && (
+                    <ManageApis
+                      apiConfig={apiConfig}
+                      formKey={formKey}
+                      setFormKey={setFormKey}
+                      formSecret={formSecret}
+                      setFormSecret={setFormSecret}
+                      formSymbol={formSymbol}
+                      setFormSymbol={setFormSymbol}
+                      formTimeframe={formTimeframe}
+                      setFormTimeframe={setFormTimeframe}
+                      formBalance={formBalance}
+                      setFormBalance={setFormBalance}
+                      isSaving={isSavingConfig}
+                      onSave={handleSaveConfig}
+                      successMsg={configSuccess}
+                      errorMsg={configError}
+                    />
                   )}
                 </div>
               </div>

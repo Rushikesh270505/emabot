@@ -1,5 +1,5 @@
 "use client";
-import { BarChart3, ListChecks, History, Bitcoin } from 'lucide-react';
+import { BarChart3, ListChecks, History, Bitcoin, Settings } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -12,6 +12,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     { id: 'strategy', label: 'EMA Strategy', icon: <ListChecks size={18} /> },
     { id: 'history', label: 'Trade History', icon: <History size={18} /> },
     { id: 'backtest', label: 'Backtesting', icon: <BarChart3 size={18} /> },
+    { id: 'manage', label: 'Manage APIs', icon: <Settings size={18} /> }
   ];
 
   return (
