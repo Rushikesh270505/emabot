@@ -433,12 +433,7 @@ sendTelegramMessage(`🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.t
   return (
     <div className="layout">
       <Sidebar activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab as DashboardTab)} />
-        {/* Command Bar */}
-        <div className="command-bar" style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem" }}>
-          <button className="button" onClick={handleShowBalance}>Balance</button>
-          <button className="button" onClick={handleManualBuy}>Buy</button>
-          <button className="button" onClick={handleManualSell}>Sell</button>
-        </div>
+
       <div className="main-content">
         <main className="shell">
           <header className="topbar">
