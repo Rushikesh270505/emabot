@@ -1,0 +1,33 @@
+exchange:
+  name: binance
+  sandbox: false
+  rate_limit: true
+
+trading:
+  timeframe: 15m
+  quote_currency: USDT
+  symbols:
+    - BTC/USDT
+  poll_seconds: 60
+  min_candles: 260
+  max_open_positions: 1
+  dry_run: true
+
+risk:
+  swing_lookback: 10
+  stop_buffer_pct: 0.001
+  use_trailing_stop: true
+
+orders:
+  entry_type: market
+  exit_type: market
+  allow_fractional_position: true
+
+storage:
+  trade_log_csv: logs/trades.csv
+  state_file: data/state.json
+
+backtest:
+  starting_balance: 100000
+  fee_rate: 0.001
+  data_dir: data/historical

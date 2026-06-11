@@ -5,39 +5,35 @@ from .models import Position, Signal, SignalType
 
 
 def evaluate_entry(df: pd.DataFrame) -> Signal:
-    """Evaluate the long-only spot entry rules on the latest closed candle."""
+    """Evaluate entry rules based on EMA 9 and EMA 21 crossover with Option B timing."""
     if len(df) < 201 or df.iloc[-1].isna().any():
         return Signal(SignalType.HOLD, "Not enough indicator history")
 
-    candle = df.iloc[-1]
-    conditions = [
-        candle["close"] > candle["ema_200"],
-        has_crossed_above(df, "ema_9", "ema_21"),
-        candle["rsi_14"] > 55,
-        candle["close"] > candle["ema_9"] and candle["close"] > candle["ema_21"],
-        candle["volume"] > candle["volume_sma_20"],
-    ]
+    # Option B: Crossover happened on the candle before the latest closed candle (iloc[-2])
+    # and the latest closed candle (iloc[-1]) confirms the trend is still active.
+    crossover_confirmed = (
+        has_crossed_above(df.iloc[:-1], "ema_9", "ema_21")
+        and df.iloc[-1]["ema_9"] > df.iloc[-1]["ema_21"]
+    )
 
-    if all(conditions):
-        return Signal(SignalType.BUY, "EMA9 crossed above EMA21 with trend, RSI, close, and volume confirmation")
+    if crossover_confirmed:
+        return Signal(SignalType.BUY, "EMA9 crossed above EMA21 (Option B confirmed)")
     return Signal(SignalType.HOLD, "Entry conditions not met")
 
 
 def evaluate_exit(df: pd.DataFrame, position: Position) -> Signal:
-    """Evaluate exit rules including stop loss, EMA exit, RSI exit, and trailing stop."""
-    if len(df) < 2 or df.iloc[-1].isna().any():
+    """Evaluate exit rules based on EMA 9 and EMA 21 crossover with Option B timing."""
+    if len(df) < 201 or df.iloc[-1].isna().any():
         return Signal(SignalType.HOLD, "Not enough indicator history")
 
-    candle = df.iloc[-1]
-    close = float(candle["close"])
-    low = float(candle["low"])
+    # Option B: Crossover happened on the candle before the latest closed candle (iloc[-2])
+    # and the latest closed candle (iloc[-1]) confirms the trend is still active.
+    crossover_confirmed = (
+        has_crossed_below(df.iloc[:-1], "ema_9", "ema_21")
+        and df.iloc[-1]["ema_9"] < df.iloc[-1]["ema_21"]
+    )
 
-    if low <= position.stop_loss:
-        return Signal(SignalType.SELL, "Stop loss hit")
-    if position.trailing_stop is not None and close <= position.trailing_stop:
-        return Signal(SignalType.SELL, "EMA21 trailing stop hit")
-    if has_crossed_below(df, "ema_9", "ema_21"):
-        return Signal(SignalType.SELL, "EMA9 crossed below EMA21")
-    if candle["rsi_14"] < 45:
-        return Signal(SignalType.SELL, "RSI fell below 45")
+    if crossover_confirmed:
+        return Signal(SignalType.SELL, "EMA9 crossed below EMA21 (Option B confirmed)")
     return Signal(SignalType.HOLD, "Exit conditions not met")
+

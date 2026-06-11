@@ -75,5 +75,5 @@ async function fetchCandles(provider: Provider, endTime?: number): Promise<Candl
     throw new Error("Not enough candle history for EMA 200.");
   }
 
-  return enrichCandles(candles).filter((candle) => candle.ema200 !== undefined).slice(-320);
+  return enrichCandles(candles).filter((candle) => candle.ema200 !== undefined).slice(-800);
 }

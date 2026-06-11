@@ -85,26 +85,27 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
   const enriched = enrichCandles(candles);
   const latest = enriched[enriched.length - 1];
   const previous = enriched[enriched.length - 2];
+  const prevPrev = enriched[enriched.length - 3];
 
-  const crossedUp = value(previous.ema9) <= value(previous.ema21) && value(latest.ema9) > value(latest.ema21);
-  const crossedDown = value(previous.ema9) >= value(previous.ema21) && value(latest.ema9) < value(latest.ema21);
+  const crossedUp = value(prevPrev.ema9) <= value(prevPrev.ema21) && value(previous.ema9) > value(previous.ema21);
+  const crossedDown = value(prevPrev.ema9) >= value(prevPrev.ema21) && value(previous.ema9) < value(previous.ema21);
+  const isBullish = value(latest.ema9) > value(latest.ema21);
+  const isBearish = value(latest.ema9) < value(latest.ema21);
+
   const conditions = [
-    { label: "Price above EMA 200", passed: latest.close > value(latest.ema200) },
-    { label: "EMA 9 crossed above EMA 21", passed: crossedUp },
-    { label: "RSI 14 greater than 55", passed: value(latest.rsi14) > 55 },
-    { label: "Close above EMA 9 and EMA 21", passed: latest.close > value(latest.ema9) && latest.close > value(latest.ema21) },
-    { label: "Volume above SMA 20", passed: latest.volume > value(latest.volumeSma20) }
+    { label: "EMA 9 crossed above EMA 21 (Previous Candle)", passed: crossedUp },
+    { label: "EMA 9 remains above EMA 21 (Latest Candle)", passed: isBullish }
   ];
 
   let signal: StrategySnapshot["signal"] = "HOLD";
-  let reason = "Waiting for all BTC/USDT long-entry confirmations.";
+  let reason = "Waiting for EMA 9 / EMA 21 bullish crossover and confirmation.";
 
   if (conditions.every((condition) => condition.passed)) {
     signal = "BUY";
-    reason = "All BTC/USDT entry conditions are aligned.";
-  } else if (crossedDown || value(latest.rsi14) < 45) {
+    reason = "EMA 9 crossed above EMA 21 (Option B confirmed).";
+  } else if (crossedDown && isBearish) {
     signal = "SELL";
-    reason = crossedDown ? "EMA 9 crossed below EMA 21." : "RSI 14 fell below 45.";
+    reason = "EMA 9 crossed below EMA 21 (Option B confirmed).";
   }
 
   const open24h = enriched[Math.max(0, enriched.length - 96)]?.close ?? latest.close;
@@ -124,7 +125,7 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
     previous,
     conditions,
     candles: enriched.slice(-8),
-    chartCandles: enriched.filter((candle) => candle.ema200 !== undefined).slice(-220),
+    chartCandles: enriched.filter((candle) => candle.ema200 !== undefined).slice(-800),
     portfolio
   };
 }
@@ -141,29 +142,20 @@ function simulatePortfolio(candles: Candle[], currentPrice: number): PortfolioSn
   let btcAmount = 0;
   let entryPrice: number | null = null;
   let positionCost = 0;
-  let stopLoss: number | null = null;
-  let trailingStop: number | null = null;
   let realizedProfitLoss = 0;
   const trades: SimulatedTrade[] = [];
 
   for (let index = 201; index < candles.length; index += 1) {
     const latest = candles[index];
     const previous = candles[index - 1];
+    const prevPrev = candles[index - 2];
 
-    if (btcAmount > 0 && stopLoss !== null) {
-      const nextTrailingStop = Math.max(trailingStop ?? stopLoss, value(latest.ema21));
-      trailingStop = Math.min(nextTrailingStop, latest.close);
-      stopLoss = Math.max(stopLoss, trailingStop);
-    }
-
-    const signal = evaluateCandleSignal(previous, latest, btcAmount > 0);
+    const signal = evaluateCandleSignal(prevPrev, previous, latest, btcAmount > 0);
 
     if (signal === "BUY" && btcAmount === 0 && cash > 0) {
       btcAmount = cash / latest.close;
       positionCost = cash;
       entryPrice = latest.close;
-      stopLoss = recentSwingLow(candles.slice(0, index + 1), 10, 0.001);
-      trailingStop = null;
       trades.push({
         timestamp: latest.timestamp,
         side: "BUY",
@@ -175,9 +167,7 @@ function simulatePortfolio(candles: Candle[], currentPrice: number): PortfolioSn
       continue;
     }
 
-    const stopExitPrice = stopLoss !== null && latest.low <= stopLoss ? stopLoss : null;
-    const trailingExitPrice = trailingStop !== null && latest.close <= trailingStop ? trailingStop : null;
-    const exitPrice = stopExitPrice ?? trailingExitPrice ?? (signal === "SELL" ? latest.close : null);
+    const exitPrice = signal === "SELL" ? latest.close : null;
 
     if (exitPrice !== null && btcAmount > 0 && entryPrice !== null) {
       const exit = closePosition(latest.timestamp, exitPrice, btcAmount, positionCost);
@@ -187,8 +177,6 @@ function simulatePortfolio(candles: Candle[], currentPrice: number): PortfolioSn
       btcAmount = 0;
       entryPrice = null;
       positionCost = 0;
-      stopLoss = null;
-      trailingStop = null;
     }
   }
 
@@ -228,23 +216,17 @@ function markPortfolioToMarket(portfolio: PortfolioSnapshot, currentPrice: numbe
   };
 }
 
-function evaluateCandleSignal(previous: Candle, latest: Candle, inPosition: boolean): "BUY" | "SELL" | "HOLD" {
-  const crossedUp = value(previous.ema9) <= value(previous.ema21) && value(latest.ema9) > value(latest.ema21);
-  const crossedDown = value(previous.ema9) >= value(previous.ema21) && value(latest.ema9) < value(latest.ema21);
+function evaluateCandleSignal(prevPrev: Candle, previous: Candle, latest: Candle, inPosition: boolean): "BUY" | "SELL" | "HOLD" {
+  const crossedUp = value(prevPrev.ema9) <= value(prevPrev.ema21) && value(previous.ema9) > value(previous.ema21);
+  const crossedDown = value(prevPrev.ema9) >= value(prevPrev.ema21) && value(previous.ema9) < value(previous.ema21);
 
-  if (inPosition && (crossedDown || value(latest.rsi14) < 45)) {
-    return "SELL";
+  if (inPosition) {
+    const isBearish = value(latest.ema9) < value(latest.ema21);
+    return crossedDown && isBearish ? "SELL" : "HOLD";
+  } else {
+    const isBullish = value(latest.ema9) > value(latest.ema21);
+    return crossedUp && isBullish ? "BUY" : "HOLD";
   }
-
-  const buyConditions = [
-    latest.close > value(latest.ema200),
-    crossedUp,
-    value(latest.rsi14) > 55,
-    latest.close > value(latest.ema9) && latest.close > value(latest.ema21),
-    latest.volume > value(latest.volumeSma20)
-  ];
-
-  return buyConditions.every(Boolean) ? "BUY" : "HOLD";
 }
 
 function closePosition(timestamp: string, price: number, amount: number, positionCost: number) {
