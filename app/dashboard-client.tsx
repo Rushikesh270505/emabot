@@ -20,7 +20,7 @@ import { formatNumber, formatUsd, type StrategySnapshot, markPortfolioToMarket }
 import { StrategyChart } from "./strategy-chart";
 import { Sidebar } from "./components/Sidebar";
 import Speedometer from "./components/Speedometer";
-
+import { sendTelegramMessage } from "./lib/telegram";
 
 type StreamStatus = "connecting" | "live" | "polling";
 type DashboardTab = "chart" | "strategy" | "history";
@@ -363,6 +363,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
 
       // After manual buy we start waiting for a bearish crossover to sell immediately
       setWaitingForSellCrossover(true);
+sendTelegramMessage(`🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.toFixed(6)} BTC`);
 
       return {
         ...current,
@@ -410,8 +411,20 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
       };
     });
     setWaitingForCrossover(true);
+sendTelegramMessage(`🔴 SELL executed at $${price.toFixed(2)} for ${current.portfolio.btcAmount.toFixed(6)} BTC, P/L: $${profitLoss.toFixed(2)} (${profitLossPct.toFixed(2)}%)`);
 };
 
+  // Show balance via Telegram
+  const handleShowBalance = () => {
+    setMarket((current) => {
+      const price = current.price;
+      const btcValue = current.portfolio.btcAmount * price;
+      const total = current.portfolio.cash + btcValue;
+      const message = `💰 Current balance: $${total.toFixed(2)} (Cash: $${current.portfolio.cash.toFixed(2)}, BTC: ${current.portfolio.btcAmount.toFixed(6)} ≈ $${btcValue.toFixed(2)})`;
+      sendTelegramMessage(message);
+      return current;
+    });
+  };
   const handleResetPortfolio = () => {
     window.location.reload();
   };
@@ -419,6 +432,12 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
   return (
     <div className="layout">
       <Sidebar activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab as DashboardTab)} />
+        {/* Command Bar */}
+        <div className="command-bar" style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem" }}>
+          <button className="button" onClick={handleShowBalance}>Balance</button>
+          <button className="button" onClick={handleManualBuy}>Buy</button>
+          <button className="button" onClick={handleManualSell}>Sell</button>
+        </div>
       <div className="main-content">
         <main className="shell">
           <header className="topbar">
