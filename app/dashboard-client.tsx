@@ -257,7 +257,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
       }
       socket?.close();
     };
-  }, [market.source]);
+  }, [market.source, market.symbol]);
 
   const signalClass = market.signal.toLowerCase();
   const changeIsPositive = market.changePct >= 0;
@@ -373,46 +373,47 @@ sendTelegramMessage(`🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.t
   };
 
   const handleManualSell = () => {
-    setMarket((current) => {
-      if (!current.portfolio.inPosition || current.portfolio.btcAmount <= 0) return current;
+    // Ensure we have a BTC position to sell
+    const current = market;
+    if (!current.portfolio.inPosition || current.portfolio.btcAmount <= 0) return;
 
-      const price = current.price;
-      const cashValue = current.portfolio.btcAmount * price;
-      const profitLoss = cashValue - current.portfolio.positionCost;
-      const profitLossPct = current.portfolio.positionCost > 0 ? (profitLoss / current.portfolio.positionCost) * 100 : 0;
-      
-      const newTrade = {
-        timestamp: new Date().toISOString(),
-        side: "SELL" as const,
-        price,
-        amount: current.portfolio.btcAmount,
-        value: cashValue,
-        profitLoss,
-        profitLossPct
-      };
+    const price = current.price;
+    const cashValue = current.portfolio.btcAmount * price;
+    const profitLoss = cashValue - current.portfolio.positionCost;
+    const profitLossPct = current.portfolio.positionCost > 0 ? (profitLoss / current.portfolio.positionCost) * 100 : 0;
 
-      const updatedPortfolio = {
-        ...current.portfolio,
-        isManual: true,
-        cash: cashValue,
-        btcAmount: 0,
-        entryPrice: null,
-        positionCost: 0,
-        inPosition: false,
-        realizedProfitLoss: current.portfolio.realizedProfitLoss + profitLoss,
-        lastTrade: newTrade,
-        totalTrades: current.portfolio.totalTrades + 1,
-        trades: [...current.portfolio.trades, newTrade]
-      };
+    const newTrade = {
+      timestamp: new Date().toISOString(),
+      side: "SELL" as const,
+      price,
+      amount: current.portfolio.btcAmount,
+      value: cashValue,
+      profitLoss,
+      profitLossPct
+    };
 
-      return {
-        ...current,
-        portfolio: markPortfolioToMarket(updatedPortfolio, price)
-      };
-    });
+    const updatedPortfolio = {
+      ...current.portfolio,
+      isManual: true,
+      cash: cashValue,
+      btcAmount: 0,
+      entryPrice: null,
+      positionCost: 0,
+      inPosition: false,
+      realizedProfitLoss: current.portfolio.realizedProfitLoss + profitLoss,
+      totalTrades: current.portfolio.totalTrades + 1,
+      trades: [...current.portfolio.trades, newTrade]
+    };
+
+    // Update market state with new portfolio
+    setMarket((prev) => ({
+      ...prev,
+      portfolio: markPortfolioToMarket(updatedPortfolio, price)
+    }));
+
     setWaitingForCrossover(true);
-sendTelegramMessage(`🔴 SELL executed at $${price.toFixed(2)} for ${current.portfolio.btcAmount.toFixed(6)} BTC, P/L: $${profitLoss.toFixed(2)} (${profitLossPct.toFixed(2)}%)`);
-};
+    sendTelegramMessage(`🔴 SELL executed at $${price.toFixed(2)} for ${current.portfolio.btcAmount.toFixed(6)} BTC, P/L: $${profitLoss.toFixed(2)} (${profitLossPct.toFixed(2)}%)`);
+  };
 
   // Show balance via Telegram
   const handleShowBalance = () => {
