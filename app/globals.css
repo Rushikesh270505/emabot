@@ -1,17 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
 :root {
   color-scheme: dark;
-  --background: #080a0d;
-  --panel: #10151b;
-  --panel-soft: #151b22;
-  --line: #26313d;
-  --text: #eef3f7;
-  --muted: #94a3b8;
-  --green: #3ddc97;
-  --red: #ff5c7a;
-  --amber: #f6c453;
-  --blue: #6aa8ff;
-  --violet: #b58cff;
-  --cyan: #8bd3dd;
+  --background: #0b0f19;
+  --panel: rgba(18, 24, 38, 0.6);
+  --panel-soft: rgba(28, 38, 57, 0.4);
+  --line: rgba(255, 255, 255, 0.08);
+  --text: #f1f5f9;
+  --muted: #8b9bb4;
+  --green: #10b981;
+  --red: #f43f5e;
+  --amber: #fbbf24;
+  --blue: #3b82f6;
+  --violet: #8b5cf6;
+  --cyan: #06b6d4;
 }
 
 * {
@@ -24,12 +26,13 @@ body {
   min-height: 100%;
   background: var(--background);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  letter-spacing: 0;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -841,3 +844,391 @@ input {
   border-radius: 6px !important;
 }
 
+/* Layout and Sidebar */
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background: radial-gradient(circle at 5% 5%, rgba(59, 130, 246, 0.04) 0%, rgba(0, 0, 0, 0) 50%), var(--background);
+}
+
+.sidebar {
+  width: 260px;
+  background: rgba(13, 18, 30, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid var(--line);
+  padding: 2rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0 0.5rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar-logo {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(59, 130, 246, 0.12));
+  color: var(--green);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.sidebar-brand-text h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.sidebar-brand-text span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-top: 0.1rem;
+}
+
+.sidebar-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sidebar-item {
+  margin: 0;
+}
+
+.sidebar-link {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.sidebar-link svg {
+  color: var(--muted);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.sidebar-link:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-link:hover svg {
+  color: var(--text);
+  transform: translateX(2px);
+}
+
+.sidebar-link.active {
+  color: var(--text);
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+
+.sidebar-link.active svg {
+  color: var(--blue);
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+  height: 100vh;
+}
+
+/* Dashboard Layout Grid */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 360px;
+  }
+}
+
+.dashboard-sidebar-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Sidebar metric rows key-value format */
+.sidebar-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.sidebar-metrics .metric {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  min-height: auto;
+}
+
+.sidebar-metrics .metric span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.sidebar-metrics .metric strong {
+  font-size: 0.95rem;
+  margin-top: 0;
+  font-weight: 600;
+}
+
+/* Strategy Tab Panel Cards */
+.panel-grid .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-top: 1rem;
+  align-items: stretch;
+  justify-content: stretch;
+  width: 100%;
+}
+
+.panel-grid .metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.panel-grid .metric span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.panel-grid .metric strong {
+  font-size: 1.1rem;
+  margin-top: 0.4rem;
+  font-weight: 700;
+}
+
+/* Compact Info-Dense Bloomberg/Binance Terminal Overrides */
+body {
+  font-size: 13.5px; /* global font size scale-down */
+}
+
+/* Normalizing all dashboard headers to be tighter */
+.shell h1 {
+  font-size: 1.15rem !important;
+  font-weight: 700;
+}
+.shell h2 {
+  font-size: 1rem !important;
+  font-weight: 700;
+}
+.shell h3 {
+  font-size: 0.85rem !important;
+  font-weight: 700;
+}
+
+/* Viewport Spacing */
+.main-content {
+  padding: 1.25rem !important;
+}
+
+/* Floating Sidebar Dock */
+.sidebar {
+  width: 220px !important;
+  padding: 1.5rem 1rem !important;
+  gap: 1.5rem !important;
+}
+
+.sidebar-brand {
+  padding: 0 0.25rem 1rem !important;
+  gap: 0.75rem !important;
+}
+
+.sidebar-logo {
+  width: 2.2rem !important;
+  height: 2.2rem !important;
+  border-radius: 8px !important;
+}
+
+.sidebar-brand-text h2 {
+  font-size: 1.05rem !important;
+}
+
+.sidebar-brand-text span {
+  font-size: 0.68rem !important;
+}
+
+.sidebar-link {
+  padding: 0.65rem 0.85rem !important;
+  border-radius: 8px !important;
+  font-size: 0.85rem !important;
+  gap: 0.75rem !important;
+}
+
+/* Grid & Column Layouts */
+.dashboard-grid {
+  gap: 1.25rem !important;
+}
+
+@media (min-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 310px !important;
+  }
+}
+
+.dashboard-sidebar-col {
+  gap: 1rem !important;
+}
+
+/* Cards & Spacing */
+.market-panel,
+.status,
+.card,
+.wallet-panel,
+.terminal,
+.chart-panel {
+  padding: 0.85rem !important;
+  border-radius: 10px !important;
+}
+
+.card-head {
+  padding-bottom: 0.6rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+/* Topbar Header Card */
+.topbar {
+  padding: 0.85rem 1.25rem !important;
+  border-radius: 10px !important;
+  margin-bottom: 1.25rem !important;
+}
+
+/* Ticker Strip metrics */
+.ticker-strip {
+  padding: 1rem !important;
+  gap: 1rem !important;
+  border-radius: 10px !important;
+  margin-bottom: 1.25rem !important;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+}
+
+.ticker-price strong {
+  font-size: 1.45rem !important;
+}
+
+.ticker-strip .metric strong {
+  font-size: 0.95rem !important;
+}
+
+.ticker-status {
+  gap: 0.35rem !important;
+}
+
+/* Account metrics rows */
+.sidebar-metrics {
+  gap: 0.5rem !important;
+  margin-top: 0.75rem !important;
+}
+
+.sidebar-metrics .metric {
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 8px !important;
+}
+
+.sidebar-metrics .metric span {
+  font-size: 0.76rem !important;
+}
+
+.sidebar-metrics .metric strong {
+  font-size: 0.88rem !important;
+}
+
+/* Checklists & Exit rules */
+.checklist {
+  gap: 0.5rem !important;
+  margin-top: 0.75rem !important;
+}
+
+.check {
+  gap: 0.5rem !important;
+  font-size: 0.82rem !important;
+}
+
+/* Trade Log Table */
+.trade-table th,
+.trade-table td {
+  padding: 0.6rem 0.75rem !important;
+  font-size: 0.82rem !important;
+}
+
+/* Strategy metrics grid cards */
+.panel-grid .metric-grid {
+  gap: 0.5rem !important;
+}
+
+.panel-grid .metric {
+  padding: 0.65rem !important;
+  border-radius: 8px !important;
+}
+
+.panel-grid .metric span {
+  font-size: 0.7rem !important;
+}
+
+.panel-grid .metric strong {
+  font-size: 0.95rem !important;
+  margin-top: 0.25rem !important;
+}
+
+/* HUD overlay text size */
+.hud-overlay {
+  padding: 0.4rem 0.75rem !important;
+  font-size: 0.72rem !important;
+}

@@ -18,14 +18,24 @@ async function getMarket(): Promise<StrategySnapshot> {
   throw new Error(errors.join(" | "));
 }
 
+import { Sidebar } from "./components/Sidebar";
+
 export default async function Home() {
   try {
     const market = await getMarket();
     return <DashboardClient initialMarket={market} />;
   } catch (error) {
-    return <MarketError message={error instanceof Error ? error.message : "Unable to load BTC/USDT market data"} />;
+    return (
+      <div className="layout">
+        <Sidebar activeTab="chart" onTabChange={() => {}} />
+        <main className="main-content">
+          <MarketError message={error instanceof Error ? error.message : "Unable to load BTC/USDT market data"} />
+        </main>
+      </div>
+    );
   }
 }
+
 
 type Provider = {
   name: string;

@@ -201,7 +201,7 @@ function simulatePortfolio(candles: Candle[], currentPrice: number): PortfolioSn
   );
 }
 
-function markPortfolioToMarket(portfolio: PortfolioSnapshot, currentPrice: number): PortfolioSnapshot {
+export function markPortfolioToMarket(portfolio: PortfolioSnapshot, currentPrice: number): PortfolioSnapshot {
   const currentValue = portfolio.cash + portfolio.btcAmount * currentPrice;
   const profitLoss = currentValue - portfolio.initialCapital;
   const unrealizedProfitLoss =

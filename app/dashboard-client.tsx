@@ -7,28 +7,28 @@ import {
   Bitcoin,
   BarChart3,
   CheckCircle2,
-  CircleAlert,
   History,
   ListChecks,
   RefreshCw,
+  CircleAlert,
   ShieldCheck,
   Table2,
-  Wallet,
   XCircle,
-  Key
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { formatNumber, formatUsd, type StrategySnapshot, markPortfolioToMarket } from "@/lib/market";
 import { StrategyChart } from "./strategy-chart";
+import { Sidebar } from "./components/Sidebar";
+import Speedometer from "./components/Speedometer";
+
 
 type StreamStatus = "connecting" | "live" | "polling";
-type DashboardTab = "chart" | "strategy" | "history" | "apis";
+type DashboardTab = "chart" | "strategy" | "history";
 
 const TABS: Array<{ id: DashboardTab; label: string; icon: ReactNode }> = [
   { id: "chart", label: "Chart Info", icon: <BarChart3 size={16} /> },
   { id: "strategy", label: "EMA Filters", icon: <ListChecks size={16} /> },
-  { id: "history", label: "Trade History", icon: <History size={16} /> },
-  { id: "apis", label: "Manage APIs", icon: <Key size={16} /> }
+  { id: "history", label: "Trade History", icon: <History size={16} /> }
 ];
 
 export function DashboardClient({ initialMarket }: { initialMarket: StrategySnapshot }) {
@@ -38,6 +38,26 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("connecting");
   const [activeTab, setActiveTab] = useState<DashboardTab>("chart");
+  const [hash, setHash] = useState("");
+
+  const [waitingForCrossover, setWaitingForCrossover] = useState(false);
+  const [waitingForSellCrossover, setWaitingForSellCrossover] = useState(false);
+
+
+
+  useEffect(() => {
+    const syncHash = () => {
+      const hash = window.location.hash.replace('#', '');
+      setHash(hash);
+      if (["chart", "strategy", "history"].includes(hash)) {
+        setActiveTab(hash as DashboardTab);
+      }
+    };
+    syncHash();
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
+
 
   // API Config States
   const [apiConfig, setApiConfig] = useState({
@@ -88,8 +108,17 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
         }
         const nextMarket = (await response.json()) as StrategySnapshot;
         if (!cancelled) {
-          setMarket(nextMarket);
           setChartCandles((current) => mergeCandles(current, nextMarket.chartCandles));
+          setMarket((current) => {
+            const isManual = (current?.portfolio as any)?.isManual;
+            if (isManual) {
+              return {
+                ...nextMarket,
+                portfolio: markPortfolioToMarket(current.portfolio, nextMarket.price)
+              };
+            }
+            return nextMarket;
+          });
         }
       } finally {
         if (!cancelled) {
@@ -105,6 +134,56 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
       window.clearInterval(interval);
     };
   }, []);
+
+  // Reset manual mode after next BUY crossover following a manual sell
+  useEffect(() => {
+    if (waitingForCrossover && market.signal === "BUY") {
+      setMarket((prev) => ({
+        ...prev,
+        portfolio: { ...prev.portfolio, isManual: false }
+      }));
+      setWaitingForCrossover(false);
+    }
+  }, [market.signal, waitingForCrossover]);
+
+
+
+  // Reset manual mode after next SELL crossover following a manual buy
+  useEffect(() => {
+    if (waitingForSellCrossover && market.signal === "SELL") {
+      setMarket((current) => {
+        if (!current.portfolio.inPosition || current.portfolio.btcAmount <= 0) return current;
+        const price = current.price;
+        const cashValue = current.portfolio.btcAmount * price;
+        const profitLoss = cashValue - current.portfolio.positionCost;
+        const profitLossPct = current.portfolio.positionCost > 0 ? (profitLoss / current.portfolio.positionCost) * 100 : 0;
+        const newTrade = {
+          timestamp: new Date().toISOString(),
+          side: "SELL" as const,
+          price,
+          amount: current.portfolio.btcAmount,
+          value: cashValue,
+          profitLoss,
+          profitLossPct
+        };
+        const updatedPortfolio = {
+          ...current.portfolio,
+          isManual: true,
+          cash: cashValue,
+          btcAmount: 0,
+          entryPrice: null,
+          positionCost: 0,
+          inPosition: false,
+          realizedProfitLoss: current.portfolio.realizedProfitLoss + profitLoss,
+          lastTrade: newTrade,
+          totalTrades: current.portfolio.totalTrades + 1,
+          trades: [...current.portfolio.trades, newTrade]
+        };
+        return { ...current, portfolio: markPortfolioToMarket(updatedPortfolio, price) };
+      });
+      setWaitingForSellCrossover(false);
+    }
+  }, [market.signal, waitingForSellCrossover]);
 
   // WebSockets Ticker updates
   useEffect(() => {
@@ -149,7 +228,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
             price,
             changePct: Number.isFinite(changePct) && !Number.isNaN(changePct) ? changePct : current.changePct,
             updatedAt: new Date(data.E ?? data.T ?? Date.now()).toISOString(),
-            portfolio: markPortfolioToMarket(current, price)
+            portfolio: markPortfolioToMarket(current.portfolio, price)
           }));
         } catch (err) {
           console.error("Error parsing trade stream update:", err);
@@ -249,242 +328,334 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
     }
   };
 
+  const handleManualBuy = () => {
+    // Ensure we have USDT balance and bullish EMA setup
+    setMarket((current) => {
+      const hasCash = current.portfolio.cash > 0;
+      const ema9 = current.latest.ema9;
+      const ema21 = current.latest.ema21;
+      const bullish = ema9 !== undefined && ema21 !== undefined && ema9 > ema21;
+      if (!hasCash || !bullish) return current;
+
+      const price = current.price;
+      const btcAmount = current.portfolio.cash / price;
+      const positionCost = current.portfolio.cash;
+      const newTrade = {
+        timestamp: new Date().toISOString(),
+        side: "BUY" as const,
+        price,
+        amount: btcAmount,
+        value: positionCost
+      };
+
+      const updatedPortfolio = {
+        ...current.portfolio,
+        isManual: true,
+        cash: 0,
+        btcAmount,
+        entryPrice: price,
+        positionCost,
+        inPosition: true,
+        lastTrade: newTrade,
+        totalTrades: current.portfolio.totalTrades + 1,
+        trades: [...current.portfolio.trades, newTrade]
+      };
+
+      // After manual buy we start waiting for a bearish crossover to sell immediately
+      setWaitingForSellCrossover(true);
+
+      return {
+        ...current,
+        portfolio: markPortfolioToMarket(updatedPortfolio, price)
+      };
+    });
+  };
+
+  const handleManualSell = () => {
+    setMarket((current) => {
+      if (!current.portfolio.inPosition || current.portfolio.btcAmount <= 0) return current;
+
+      const price = current.price;
+      const cashValue = current.portfolio.btcAmount * price;
+      const profitLoss = cashValue - current.portfolio.positionCost;
+      const profitLossPct = current.portfolio.positionCost > 0 ? (profitLoss / current.portfolio.positionCost) * 100 : 0;
+      
+      const newTrade = {
+        timestamp: new Date().toISOString(),
+        side: "SELL" as const,
+        price,
+        amount: current.portfolio.btcAmount,
+        value: cashValue,
+        profitLoss,
+        profitLossPct
+      };
+
+      const updatedPortfolio = {
+        ...current.portfolio,
+        isManual: true,
+        cash: cashValue,
+        btcAmount: 0,
+        entryPrice: null,
+        positionCost: 0,
+        inPosition: false,
+        realizedProfitLoss: current.portfolio.realizedProfitLoss + profitLoss,
+        lastTrade: newTrade,
+        totalTrades: current.portfolio.totalTrades + 1,
+        trades: [...current.portfolio.trades, newTrade]
+      };
+
+      return {
+        ...current,
+        portfolio: markPortfolioToMarket(updatedPortfolio, price)
+      };
+    });
+    setWaitingForCrossover(true);
+};
+
+  const handleResetPortfolio = () => {
+    window.location.reload();
+  };
+
   return (
-    <main className="shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="mark" aria-hidden="true">
-            <Bitcoin size={22} />
-          </div>
-          <div>
-            <h1>EMABOT BTC</h1>
-            <p>BTC/USDT spot strategy · 15m</p>
-          </div>
-        </div>
-        <div className="actions">
-          <a className="button" href="/api/market" title="Open raw market snapshot">
-            <Activity size={17} />
-            Live data
-          </a>
-          <button className="icon-button" title="Refresh" aria-label="Refresh" onClick={() => window.location.reload()}>
-            <RefreshCw size={18} className={isRefreshing ? "spin" : ""} />
-          </button>
-        </div>
-      </header>
-
-      <section className="dashboard">
-        <div className="dashboard-grid">
-          {/* Main Content Column (Left) */}
-          <div className="dashboard-main-col">
-            {/* Top Market Ticker Strip */}
-            <div className="ticker-strip">
-              <div className="pair">
-                <div className="coin">B</div>
-                <div>
-                  <h2>{market.symbol}</h2>
-                  <p>{market.source} spot · 15m</p>
-                </div>
+    <div className="layout">
+      <Sidebar activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab as DashboardTab)} />
+      <div className="main-content">
+        <main className="shell">
+          <header className="topbar">
+            <div className="brand">
+              <div className="mark" aria-hidden="true">
+                <Bitcoin size={22} />
               </div>
-              <div className="ticker-price">
-                <span>Last Price</span>
-                <strong>{formatUsd(market.price)}</strong>
-              </div>
-              <Metric label="24h Change" value={`${market.changePct.toFixed(2)}%`} tone={changeIsPositive ? "positive" : "negative"} />
-              <Metric label="Current Value" value={`${formatUsd(market.portfolio.currentValue)} USDT`} />
-              <Metric
-                label="Profit / Loss"
-                value={`${formatSignedUsd(market.portfolio.profitLoss)} (${formatSignedPct(market.portfolio.profitLossPct)})`}
-                tone={pnlIsPositive ? "positive" : "negative"}
-              />
-              <div className="ticker-status">
-                <span className={`signal ${signalClass}`}>
-                  {market.signal === "BUY" && <ArrowUpRight size={18} />}
-                  {market.signal === "SELL" && <ArrowDownRight size={18} />}
-                  {market.signal === "HOLD" && <CircleAlert size={18} />}
-                  {market.signal}
-                </span>
-                <span className={`pill stream ${streamStatus}`}>
-                  <span />
-                  {streamStatus === "live" ? "Live" : streamStatus === "connecting" ? "Connecting" : "Polling"}
-                </span>
+              <div>
+                <h1>EMABOT BTC</h1>
+                <p>BTC/USDT spot strategy · 15m</p>
               </div>
             </div>
-
-            {/* Interactive Strategy Chart */}
-            <StrategyChart candles={chartCandles} isLoadingOlder={isLoadingOlder} onLoadOlder={loadOlderCandles} />
-
-            {/* Bottom Tabs Panel */}
-            <div className="tabs-container">
-              <nav className="tabs" aria-label="Dashboard sections">
-                {TABS.map((tab) => (
-                  <button
-                    className={activeTab === tab.id ? "active" : ""}
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    type="button"
-                  >
-                    {tab.icon}
-                    {tab.label}
-                  </button>
-                ))}
-              </nav>
-
-              <section className="tab-body">
-                {activeTab === "chart" && (
-                  <div className="tab-note-card">
-                    <h4>Interactive Chart Guide</h4>
-                    <ul>
-                      <li><strong>Scroll / Swipe</strong>: Scroll up/down or swipe left/right to pan through history.</li>
-                      <li><strong>Zoom</strong>: Use manual buttons at the top right, or hold <code>Ctrl</code> while scrolling.</li>
-                      <li><strong>Crosshair</strong>: Hover over the chart to inspect prices, wicks, and indicator values at any point in time.</li>
-                      <li><strong>Auto loading</strong>: Pan the chart all the way to the left to automatically load older history.</li>
-                    </ul>
-                  </div>
-                )}
-
-                {activeTab === "strategy" && (
-                  <div className="panel-grid">
-                    <InfoCard title="Trend Filters" icon={<Activity size={18} />}>
-                      <div className="metric-grid">
-                        <Metric label="EMA 9" value={formatUsdValue(market.latest.ema9)} />
-                        <Metric label="EMA 21" value={formatUsdValue(market.latest.ema21)} />
-                        <Metric label="EMA 200" value={formatUsdValue(market.latest.ema200)} />
-                      </div>
-                    </InfoCard>
-
-                    <InfoCard title="Momentum" icon={<ShieldCheck size={18} />}>
-                      <div className="metric-grid">
-                        <Metric label="RSI 14" value={formatNumber(market.latest.rsi14, 1)} />
-                        <Metric label="Volume" value={formatNumber(market.latest.volume, 2)} />
-                        <Metric label="Vol SMA 20" value={formatNumber(market.latest.volumeSma20, 2)} />
-                      </div>
-                    </InfoCard>
-                  </div>
-                )}
-
-                {activeTab === "history" && (
-                  <InfoCard title="Trade History" icon={<Table2 size={18} />}>
-                    <TradeHistory market={market} />
-                  </InfoCard>
-                )}
-
-                {activeTab === "apis" && (
-                  <ApiManagementTab
-                    apiConfig={apiConfig}
-                    formKey={formKey}
-                    setFormKey={setFormKey}
-                    formSecret={formSecret}
-                    setFormSecret={setFormSecret}
-                    formSymbol={formSymbol}
-                    setFormSymbol={setFormSymbol}
-                    formTimeframe={formTimeframe}
-                    setFormTimeframe={setFormTimeframe}
-                    formBalance={formBalance}
-                    setFormBalance={setFormBalance}
-                    isSaving={isSavingConfig}
-                    onSave={handleSaveConfig}
-                    successMsg={configSuccess}
-                    errorMsg={configError}
-                  />
-                )}
-              </section>
-            </div>
-          </div>
-
-          {/* Sidebar Widgets Column (Right) */}
-          <div className="dashboard-sidebar-col">
-            {/* Account strip card */}
-            <div className="card sidebar-card account-card">
-              <div className="card-head">
-                <h3>Account & Position</h3>
-                <span className={`position-badge ${market.portfolio.inPosition ? "active" : ""}`}>
-                  {market.portfolio.inPosition ? "In Position" : "No Position"}
-                </span>
-              </div>
-              <div className="sidebar-metrics">
-                <Metric label="USDT Balance" value={`${formatUsd(market.portfolio.cash)}`} />
-                <Metric label="BTC Position" value={`${formatNumber(market.portfolio.btcAmount, 8)} BTC`} />
-                <Metric
-                  label="Open PnL"
-                  value={formatSignedUsd(market.portfolio.unrealizedProfitLoss)}
-                  tone={market.portfolio.unrealizedProfitLoss >= 0 ? "positive" : "negative"}
-                />
-                <Metric label="Realized PnL" value={formatSignedUsd(market.portfolio.realizedProfitLoss)} tone={market.portfolio.realizedProfitLoss >= 0 ? "positive" : "negative"} />
-                <Metric label="Entry Price" value={market.portfolio.entryPrice ? formatUsd(market.portfolio.entryPrice) : "-"} />
-              </div>
-            </div>
-
-            {/* Entry Checklist card */}
-            <div className="card sidebar-card checklist-card">
-              <div className="card-head">
-                <h3>Entry Checklist</h3>
-                <span className="pill"><ListChecks size={16} /></span>
-              </div>
-              <div className="checklist">
-                {market.conditions.map((condition) => (
-                  <div className="check" key={condition.label}>
-                    {condition.passed ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="no" size={18} />}
-                    <span>{condition.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Exit rules card */}
-            <div className="card sidebar-card exit-rules-card">
-              <div className="card-head">
-                <h3>Exit Rules</h3>
-                <span className="pill"><ArrowDownRight size={16} /></span>
-              </div>
-              <div className="checklist">
-                <div className="check">
-                  <CircleAlert className={market.signal === "SELL" ? "ok" : "muted"} size={18} />
-                  <span>EMA 9 crossed below EMA 21 (Option B confirmed)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Manage APIs widget card */}
-            <div className="card sidebar-card api-widget-card">
-              <div className="card-head">
-                <h3>Active Connection</h3>
-                <span className="pill"><ShieldCheck size={16} /></span>
-              </div>
-              <div className="api-widget-details">
-                <div className="widget-row">
-                  <span>Binance Key:</span>
-                  <strong>{apiConfig.hasApiKey ? "••••••••••••1234" : "Not configured"}</strong>
-                </div>
-                <div className="widget-row">
-                  <span>Symbol:</span>
-                  <strong>{apiConfig.symbol}</strong>
-                </div>
-                <div className="widget-row">
-                  <span>Timeframe:</span>
-                  <strong>{apiConfig.timeframe}</strong>
-                </div>
-                <div className="widget-row">
-                  <span>Allotted Balance:</span>
-                  <strong>{formatUsd(apiConfig.allottedBalance)}</strong>
-                </div>
-              </div>
-              <button
-                className="button full-width-btn"
-                style={{ marginTop: "1rem", width: "100%", fontWeight: "bold" }}
-                onClick={() => {
-                  setActiveTab("apis");
-                  // Smooth scroll to tabs container on mobile
-                  const el = document.querySelector(".tabs-container");
-                  el?.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                Configure Connection
+            <div className="actions">
+              <a className="button" href="/api/market" title="Open raw market snapshot">
+                <Activity size={17} />
+                Live data
+              </a>
+              <button className="icon-button" title="Refresh" aria-label="Refresh" onClick={() => window.location.reload()}>
+                <RefreshCw size={18} className={isRefreshing ? "spin" : ""} />
               </button>
             </div>
-          </div>
-        </div>
-      </section>
-    </main>
+          </header>
+
+          <section className="dashboard">
+            <div className="dashboard-grid">
+              {/* Main Content Column (Left) */}
+              <div className="dashboard-main-col">
+                {/* Top Market Ticker Strip */}
+                <div className="ticker-strip">
+                  <div className="pair">
+                    <div className="coin">B</div>
+                    <div>
+                      <h2>{market.symbol}</h2>
+                      <p>{market.source} spot · 15m</p>
+                    </div>
+                  </div>
+                  <div className="ticker-price">
+                    <span>Last Price</span>
+                    <strong>{formatUsd(market.price)}</strong>
+                  </div>
+                  <Metric label="24h Change" value={`${market.changePct.toFixed(2)}%`} tone={changeIsPositive ? "positive" : "negative"} />
+                  <Metric label="Current Value" value={`${formatUsd(market.portfolio.currentValue)} USDT`} />
+                  <Metric
+                    label="Profit / Loss"
+                    value={`${formatSignedUsd(market.portfolio.profitLoss)} (${formatSignedPct(market.portfolio.profitLossPct)})`}
+                    tone={pnlIsPositive ? "positive" : "negative"}
+                  />
+                  <div className="ticker-status">
+                    <span className={`signal ${signalClass}`}>
+                      {market.signal === "BUY" && <ArrowUpRight size={18} />}
+                      {market.signal === "SELL" && <ArrowDownRight size={18} />}
+                      {market.signal === "HOLD" && <CircleAlert size={18} />}
+                      {market.signal}
+                    </span>
+                    <span className={`pill stream ${streamStatus}`}>
+                      <span />
+                      {streamStatus === "live" ? "Live" : streamStatus === "connecting" ? "Connecting" : "Polling"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Main Content Area based on activeTab */}
+                <div className="main-view-content" style={{ marginTop: "1.5rem" }}>
+                  {activeTab === "chart" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                      <StrategyChart candles={chartCandles} isLoadingOlder={isLoadingOlder} onLoadOlder={loadOlderCandles} />
+                      <div className="card tab-body" style={{ padding: "1.5rem" }}>
+                        <h4 style={{ margin: "0 0 1rem", fontSize: "1.1rem" }}>Interactive Chart Guide</h4>
+                        <ul style={{ margin: 0, paddingLeft: "1.25rem", color: "var(--muted)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                          <li><strong>Scroll / Swipe</strong>: Scroll up/down or swipe left/right to pan through history.</li>
+                          <li><strong>Zoom</strong>: Use manual buttons at the top right, or hold <code>Ctrl</code> while scrolling.</li>
+                          <li><strong>Crosshair</strong>: Hover over the chart to inspect prices, wicks, and indicator values at any point in time.</li>
+                          <li><strong>Auto loading</strong>: Pan the chart all the way to the left to automatically load older history.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === "strategy" && (
+                    <div className="panel-grid">
+                      <InfoCard title="Trend Filters" icon={<Activity size={18} />}>
+                        <div className="metric-grid">
+                          <Metric label="EMA 9" value={formatUsdValue(market.latest.ema9)} />
+                          <Metric label="EMA 21" value={formatUsdValue(market.latest.ema21)} />
+                          <Metric label="EMA 200" value={formatUsdValue(market.latest.ema200)} />
+                        </div>
+                      </InfoCard>
+
+{/* EMA Proximity Speedometer */}
+<InfoCard title="EMA Proximity" icon={<ArrowUpRight size={18} />}>
+  <Speedometer ema9={market.latest.ema9} ema21={market.latest.ema21} />
+</InfoCard>
+
+                      <InfoCard title="Momentum" icon={<ShieldCheck size={18} />}>
+                        <div className="metric-grid">
+                          <Metric label="RSI 14" value={formatNumber(market.latest.rsi14, 1)} />
+                          <Metric label="Volume" value={formatNumber(market.latest.volume, 2)} />
+                          <Metric label="Vol SMA 20" value={formatNumber(market.latest.volumeSma20, 2)} />
+                        </div>
+                      </InfoCard>
+                    </div>
+                  )}
+
+                  {activeTab === "history" && (
+                    <InfoCard title="Trade History" icon={<Table2 size={18} />}>
+                      <TradeHistory market={market} />
+                    </InfoCard>
+                  )}
+                </div>
+              </div>
+
+              {/* Sidebar Widgets Column (Right) */}
+              <div className="dashboard-sidebar-col">
+                {/* Account strip card */}
+                {/* EMA Proximity Speedometer */}
+<InfoCard title="EMA Proximity" icon={<ArrowUpRight size={18} />}>
+  <Speedometer ema9={market.latest.ema9} ema21={market.latest.ema21} />
+</InfoCard>
+<div className="card sidebar-card account-card">
+                  <div className="card-head">
+                    <h3>Account & Position</h3>
+                    <span className={`position-badge ${market.portfolio.inPosition ? "active" : ""}`}>
+                      {market.portfolio.inPosition ? "In Position" : "No Position"}
+                    </span>
+                  </div>
+                  <div className="sidebar-metrics">
+                    <Metric label="USDT Balance" value={`${formatUsd(market.portfolio.cash)}`} />
+                    <Metric label="BTC Position" value={`${formatNumber(market.portfolio.btcAmount, 8)} BTC`} />
+                    <Metric
+                      label="Open PnL"
+                      value={formatSignedUsd(market.portfolio.unrealizedProfitLoss)}
+                      tone={market.portfolio.unrealizedProfitLoss >= 0 ? "positive" : "negative"}
+                    />
+                    <Metric label="Realized PnL" value={formatSignedUsd(market.portfolio.realizedProfitLoss)} tone={market.portfolio.realizedProfitLoss >= 0 ? "positive" : "negative"} />
+                    <Metric label="Entry Price" value={market.portfolio.entryPrice ? formatUsd(market.portfolio.entryPrice) : "-"} />
+                  </div>
+
+                  <div className="trade-buttons" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "1rem" }}>
+                    <button 
+                      onClick={handleManualBuy} 
+                      disabled={market.portfolio.inPosition || market.portfolio.cash <= 0}
+                      className="button buy-btn"
+                      style={{
+                        background: "rgba(16, 185, 129, 0.12)",
+                        borderColor: "rgba(16, 185, 129, 0.3)",
+                        color: "#34d399",
+                        cursor: "pointer",
+                        padding: "0.5rem",
+                        minHeight: "auto",
+                        fontWeight: 600,
+                        borderRadius: "8px",
+                        textAlign: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      BUY BTC
+                    </button>
+                    <button 
+                      onClick={handleManualSell} 
+                      disabled={!market.portfolio.inPosition}
+                      className="button sell-btn"
+                      style={{
+                        background: "rgba(244, 63, 94, 0.12)",
+                        borderColor: "rgba(244, 63, 94, 0.3)",
+                        color: "#fb7185",
+                        cursor: "pointer",
+                        padding: "0.5rem",
+                        minHeight: "auto",
+                        fontWeight: 600,
+                        borderRadius: "8px",
+                        textAlign: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      SELL BTC
+                    </button>
+
+                    {(market.portfolio as any).isManual && (
+                      <button 
+                        onClick={handleResetPortfolio} 
+                        className="button reset-btn"
+                        style={{
+                          gridColumn: "span 2",
+                          marginTop: "0.5rem",
+                          background: "transparent",
+                          border: "none",
+                          color: "var(--muted)",
+                          fontSize: "0.76rem",
+                          textDecoration: "underline",
+                          cursor: "pointer",
+                          padding: 0,
+                          minHeight: "auto",
+                          display: "flex",
+                          justifyContent: "center"
+                        }}
+                      >
+                        Reset to Auto
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Entry Checklist card */}
+                <div className="card sidebar-card checklist-card">
+                  <div className="card-head">
+                    <h3>Entry Checklist</h3>
+                    <span className="pill"><ListChecks size={16} /></span>
+                  </div>
+                  <div className="checklist">
+                    {market.conditions.map((condition) => (
+                      <div className="check" key={condition.label}>
+                        {condition.passed ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="no" size={18} />}
+                        <span>{condition.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Exit rules card */}
+                <div className="card sidebar-card exit-rules-card">
+                  <div className="card-head">
+                    <h3>Exit Rules</h3>
+                    <span className="pill"><ArrowDownRight size={16} /></span>
+                  </div>
+                  <div className="checklist">
+                    <div className="check">
+                      <CircleAlert className={market.signal === "SELL" ? "ok" : "muted"} size={18} />
+                      <span>EMA 9 crossed below EMA 21 (Option B confirmed)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
   );
 }
 
@@ -715,20 +886,7 @@ function mergeCandles<T extends { timestamp: string }>(left: T[], right: T[]): T
   );
 }
 
-function markPortfolioToMarket(market: StrategySnapshot, price: number) {
-  const currentValue = market.portfolio.cash + market.portfolio.btcAmount * price;
-  const profitLoss = currentValue - market.portfolio.initialCapital;
-  const unrealizedProfitLoss =
-    market.portfolio.btcAmount > 0 ? market.portfolio.btcAmount * price - market.portfolio.positionCost : 0;
 
-  return {
-    ...market.portfolio,
-    currentValue,
-    profitLoss,
-    profitLossPct: market.portfolio.initialCapital > 0 ? (profitLoss / market.portfolio.initialCapital) * 100 : 0,
-    unrealizedProfitLoss
-  };
-}
 
 function formatSignedUsd(value: number) {
   const sign = value > 0 ? "+" : "";
