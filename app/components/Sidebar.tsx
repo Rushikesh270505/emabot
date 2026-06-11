@@ -11,6 +11,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     { id: 'chart', label: 'Chart View', icon: <BarChart3 size={18} /> },
     { id: 'strategy', label: 'EMA Strategy', icon: <ListChecks size={18} /> },
     { id: 'history', label: 'Trade History', icon: <History size={18} /> },
+    { id: 'backtest', label: 'Backtesting', icon: <BarChart3 size={18} /> },
   ];
 
   return (

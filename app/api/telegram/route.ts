@@ -28,7 +28,9 @@ export async function POST(request: Request) {
       case 'balance':
         // Fetch current market snapshot to compute balance
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/market`);
+          // Determine base URL for internal API calls. Prefer env var, otherwise derive from request headers.
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://emabot.vercel.app";
+          const res = await fetch(`${baseUrl}/api/market`);
           if (res.ok) {
             const market = await res.json();
             const price = market.price;
@@ -66,6 +68,7 @@ export async function POST(request: Request) {
           const cash = 0;
           const btc = btcAmount;
           const updatedBalance = btc * price;
+          console.log('[Telegram webhook] BUY executed', { price, btcAmount, updatedBalance });
           reply = `🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.toFixed(6)} BTC.\nNew balance: $${cash.toFixed(2)} cash, ${btc.toFixed(6)} BTC (≈ $${updatedBalance.toFixed(2)})`;
         } catch (e) {
           reply = '⚠️ Failed to execute BUY command.';
@@ -86,6 +89,7 @@ export async function POST(request: Request) {
           const cashValue = market.portfolio.btcAmount * price;
           const profitLoss = cashValue - market.portfolio.positionCost;
           const profitLossPct = market.portfolio.positionCost > 0 ? (profitLoss / market.portfolio.positionCost) * 100 : 0;
+          console.log('[Telegram webhook] SELL executed', { price, btcAmount: market.portfolio.btcAmount, profitLoss, profitLossPct });
           const newTrade = {
             timestamp: new Date().toISOString(),
             side: 'SELL',

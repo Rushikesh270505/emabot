@@ -19,16 +19,18 @@ import { useEffect, useState, type ReactNode } from "react";
 import { formatNumber, formatUsd, type StrategySnapshot, markPortfolioToMarket } from "@/lib/market";
 import { StrategyChart } from "./strategy-chart";
 import { Sidebar } from "./components/Sidebar";
+import { BacktestPanel } from "./components/BacktestPanel";
 import Speedometer from "./components/Speedometer";
 import { sendTelegramMessage } from "./lib/telegram";
 
 type StreamStatus = "connecting" | "live" | "polling";
-type DashboardTab = "chart" | "strategy" | "history";
+type DashboardTab = "chart" | "strategy" | "history" | "backtest";
 
 const TABS: Array<{ id: DashboardTab; label: string; icon: ReactNode }> = [
   { id: "chart", label: "Chart Info", icon: <BarChart3 size={16} /> },
   { id: "strategy", label: "EMA Filters", icon: <ListChecks size={16} /> },
-  { id: "history", label: "Trade History", icon: <History size={16} /> }
+  { id: "history", label: "Trade History", icon: <History size={16} /> },
+  { id: "backtest", label: "Backtesting", icon: <BarChart3 size={16} /> }
 ];
 
 export function DashboardClient({ initialMarket }: { initialMarket: StrategySnapshot }) {
@@ -541,6 +543,9 @@ sendTelegramMessage(`🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.t
                     <InfoCard title="Trade History" icon={<Table2 size={18} />}>
                       <TradeHistory market={market} />
                     </InfoCard>
+                  )}
+                  {activeTab === "backtest" && (
+                    <BacktestPanel market={market} />
                   )}
                 </div>
               </div>
