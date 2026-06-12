@@ -18,7 +18,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { formatNumber, formatUsd, type StrategySnapshot, markPortfolioToMarket } from "@/lib/market";
 import { StrategyChart } from "./strategy-chart";
-import { ManageApis } from "./components/ManageApis";
+import ManageApis from "./components/ManageApis";
 import { Settings } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { BacktestPanel } from "./components/BacktestPanel";
@@ -26,7 +26,7 @@ import Speedometer from "./components/Speedometer";
 import { sendTelegramMessage } from "./lib/telegram";
 
 type StreamStatus = "connecting" | "live" | "polling";
-type DashboardTab = "chart" | "strategy" | "history" | "backtest";
+type DashboardTab = "chart" | "strategy" | "history" | "backtest" | "manage";
 
 const TABS: Array<{ id: DashboardTab; label: string; icon: ReactNode }> = [
   { id: "chart", label: "Chart Info", icon: <BarChart3 size={16} /> },

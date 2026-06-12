@@ -60,7 +60,19 @@ async function fetchProviderMarket(provider: Provider): Promise<StrategySnapshot
     volume: Number(row[5])
   }));
 
-  const snapshot = buildSnapshot(candles);
+  let initialCapital = 100000;
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const configPath = path.join(process.cwd(), "config.yaml");
+    if (fs.existsSync(configPath)) {
+      const configText = fs.readFileSync(configPath, "utf-8");
+      const balMatch = configText.match(/starting_balance:\s*(\S+)/);
+      if (balMatch) initialCapital = Number(balMatch[1]) || 100000;
+    }
+  } catch (e) {}
+
+  const snapshot = buildSnapshot(candles, initialCapital);
 
   return withPortfolioPrice({
     ...snapshot,

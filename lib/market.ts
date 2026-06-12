@@ -56,8 +56,6 @@ export type SimulatedTrade = {
   profitLossPct?: number;
 };
 
-const INITIAL_CAPITAL = 100000;
-
 export function enrichCandles(candles: Candle[]): Candle[] {
   const closes = candles.map((candle) => candle.close);
   const volumes = candles.map((candle) => candle.volume);
@@ -77,7 +75,7 @@ export function enrichCandles(candles: Candle[]): Candle[] {
   }));
 }
 
-export function buildSnapshot(candles: Candle[]): StrategySnapshot {
+export function buildSnapshot(candles: Candle[], initialCapital: number = 100000): StrategySnapshot {
   if (candles.length < 201) {
     throw new Error("At least 201 closed candles are required for EMA 200 strategy data.");
   }
@@ -110,7 +108,7 @@ export function buildSnapshot(candles: Candle[]): StrategySnapshot {
 
   const open24h = enriched[Math.max(0, enriched.length - 96)]?.close ?? latest.close;
   const changePct = ((latest.close - open24h) / open24h) * 100;
-  const portfolio = simulatePortfolio(enriched, latest.close);
+  const portfolio = simulatePortfolio(enriched, latest.close, initialCapital);
 
   return {
     symbol: "BTC/USDT",
@@ -137,8 +135,8 @@ export function withPortfolioPrice(snapshot: StrategySnapshot, price: number): S
   };
 }
 
-function simulatePortfolio(candles: Candle[], currentPrice: number): PortfolioSnapshot {
-  let cash = INITIAL_CAPITAL;
+function simulatePortfolio(candles: Candle[], currentPrice: number, initialCapital: number): PortfolioSnapshot {
+  let cash = initialCapital;
   let btcAmount = 0;
   let entryPrice: number | null = null;
   let positionCost = 0;
@@ -180,16 +178,16 @@ function simulatePortfolio(candles: Candle[], currentPrice: number): PortfolioSn
     }
   }
 
-  return markPortfolioToMarket(
+    return markPortfolioToMarket(
     {
-      initialCapital: INITIAL_CAPITAL,
+      initialCapital,
       cash,
       btcAmount,
       entryPrice,
       positionCost,
       currentValue: cash,
-      profitLoss: cash - INITIAL_CAPITAL,
-      profitLossPct: ((cash - INITIAL_CAPITAL) / INITIAL_CAPITAL) * 100,
+      profitLoss: cash - initialCapital,
+      profitLossPct: ((cash - initialCapital) / initialCapital) * 100,
       realizedProfitLoss,
       unrealizedProfitLoss: 0,
       inPosition: btcAmount > 0,
