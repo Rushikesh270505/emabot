@@ -663,6 +663,19 @@ sendTelegramMessage(`🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.t
                   </div>
                 </div>
 
+                {/* Bot Status card */}
+                <div className="card sidebar-card status-card">
+                  <div className="card-head">
+                    <h3>Bot Status</h3>
+                    <span className="pill"><Activity size={16} /></span>
+                  </div>
+                  <div style={{ padding: "1rem", fontSize: "0.9rem", color: "var(--muted)", lineHeight: "1.5" }}>
+                    {market.portfolio.inPosition 
+                      ? <span><strong>Holding BTC.</strong> Waiting for EMA 9 to cross below EMA 21 to execute a SELL.</span>
+                      : <span><strong>No position.</strong> Waiting for EMA 9 to cross above EMA 21 to execute a BUY.</span>}
+                  </div>
+                </div>
+
                 {/* Entry Checklist card */}
                 <div className="card sidebar-card checklist-card">
                   <div className="card-head">
