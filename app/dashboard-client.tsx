@@ -688,7 +688,7 @@ sendTelegramMessage(`🟢 BUY executed at $${price.toFixed(2)} for ${btcAmount.t
                   <div className="checklist">
                     <div className="check">
                       <CircleAlert className={market.signal === "SELL" ? "ok" : "muted"} size={18} />
-                      <span>EMA 9 crossed below EMA 21 (Option B confirmed)</span>
+                      <span>EMA 9 crossed below EMA 21</span>
                     </div>
                   </div>
                 </div>

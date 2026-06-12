@@ -85,25 +85,22 @@ export function buildSnapshot(candles: Candle[], initialCapital: number = 100000
   const previous = enriched[enriched.length - 2];
   const prevPrev = enriched[enriched.length - 3];
 
-  const crossedUp = value(prevPrev.ema9) <= value(prevPrev.ema21) && value(previous.ema9) > value(previous.ema21);
-  const crossedDown = value(prevPrev.ema9) >= value(prevPrev.ema21) && value(previous.ema9) < value(previous.ema21);
-  const isBullish = value(latest.ema9) > value(latest.ema21);
-  const isBearish = value(latest.ema9) < value(latest.ema21);
+  const crossedUp = value(previous.ema9) <= value(previous.ema21) && value(latest.ema9) > value(latest.ema21);
+  const crossedDown = value(previous.ema9) >= value(previous.ema21) && value(latest.ema9) < value(latest.ema21);
 
   const conditions = [
-    { label: "EMA 9 crossed above EMA 21 (Previous Candle)", passed: crossedUp },
-    { label: "EMA 9 remains above EMA 21 (Latest Candle)", passed: isBullish }
+    { label: "EMA 9 crossed above EMA 21", passed: crossedUp }
   ];
 
   let signal: StrategySnapshot["signal"] = "HOLD";
-  let reason = "Waiting for EMA 9 / EMA 21 bullish crossover and confirmation.";
+  let reason = "Waiting for EMA 9 / EMA 21 bullish crossover.";
 
-  if (conditions.every((condition) => condition.passed)) {
+  if (crossedUp) {
     signal = "BUY";
-    reason = "EMA 9 crossed above EMA 21 (Option B confirmed).";
-  } else if (crossedDown && isBearish) {
+    reason = "EMA 9 crossed above EMA 21.";
+  } else if (crossedDown) {
     signal = "SELL";
-    reason = "EMA 9 crossed below EMA 21 (Option B confirmed).";
+    reason = "EMA 9 crossed below EMA 21.";
   }
 
   const open24h = enriched[Math.max(0, enriched.length - 96)]?.close ?? latest.close;
@@ -215,15 +212,13 @@ export function markPortfolioToMarket(portfolio: PortfolioSnapshot, currentPrice
 }
 
 function evaluateCandleSignal(prevPrev: Candle, previous: Candle, latest: Candle, inPosition: boolean): "BUY" | "SELL" | "HOLD" {
-  const crossedUp = value(prevPrev.ema9) <= value(prevPrev.ema21) && value(previous.ema9) > value(previous.ema21);
-  const crossedDown = value(prevPrev.ema9) >= value(prevPrev.ema21) && value(previous.ema9) < value(previous.ema21);
+  const crossedUp = value(previous.ema9) <= value(previous.ema21) && value(latest.ema9) > value(latest.ema21);
+  const crossedDown = value(previous.ema9) >= value(previous.ema21) && value(latest.ema9) < value(latest.ema21);
 
   if (inPosition) {
-    const isBearish = value(latest.ema9) < value(latest.ema21);
-    return crossedDown && isBearish ? "SELL" : "HOLD";
+    return crossedDown ? "SELL" : "HOLD";
   } else {
-    const isBullish = value(latest.ema9) > value(latest.ema21);
-    return crossedUp && isBullish ? "BUY" : "HOLD";
+    return crossedUp ? "BUY" : "HOLD";
   }
 }
 

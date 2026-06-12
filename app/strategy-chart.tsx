@@ -323,7 +323,7 @@ export function StrategyChart({
           {/* Indicator Line Series */}
           <SeriesPath candles={visibleSeries} xFor={xFor} yFor={priceY} field="close" color="rgba(238,243,247,0.4)" width={1.2} />
           <SeriesPath candles={visibleSeries} xFor={xFor} yFor={priceY} field="ema9" color="#3ddc97" width={1.8} />
-          <SeriesPath candles={visibleSeries} xFor={xFor} yFor={priceY} field="ema21" color="#6aa8ff" width={1.8} />
+          <SeriesPath candles={visibleSeries} xFor={xFor} yFor={priceY} field="ema21" color="#ff5c7a" width={1.8} />
           <SeriesPath candles={visibleSeries} xFor={xFor} yFor={priceY} field="ema200" color="#f6c453" width={1.8} />
 
           {/* RSI Indicator Line */}
@@ -674,7 +674,7 @@ function formatCrosshairTime(isoString: string): string {
   }
 }
 
-// Simple trade signals detector based on Option B crossover
+// Simple trade signals detector based on crossover
 function detectCandleSignals(candles: Candle[]): Array<"BUY" | "SELL" | "HOLD"> {
   const signals: Array<"BUY" | "SELL" | "HOLD"> = Array(candles.length).fill("HOLD");
   let inPosition = false;
@@ -682,17 +682,14 @@ function detectCandleSignals(candles: Candle[]): Array<"BUY" | "SELL" | "HOLD"> 
   for (let i = 201; i < candles.length; i++) {
     const latest = candles[i];
     const previous = candles[i - 1];
-    const prevPrev = candles[i - 2];
 
-    const crossedUp = value(prevPrev.ema9) <= value(prevPrev.ema21) && value(previous.ema9) > value(previous.ema21);
-    const crossedDown = value(prevPrev.ema9) >= value(prevPrev.ema21) && value(previous.ema9) < value(previous.ema21);
-    const isBullish = value(latest.ema9) > value(latest.ema21);
-    const isBearish = value(latest.ema9) < value(latest.ema21);
+    const crossedUp = value(previous.ema9) <= value(previous.ema21) && value(latest.ema9) > value(latest.ema21);
+    const crossedDown = value(previous.ema9) >= value(previous.ema21) && value(latest.ema9) < value(latest.ema21);
 
-    if (!inPosition && crossedUp && isBullish) {
+    if (!inPosition && crossedUp) {
       signals[i] = "BUY";
       inPosition = true;
-    } else if (inPosition && crossedDown && isBearish) {
+    } else if (inPosition && crossedDown) {
       signals[i] = "SELL";
       inPosition = false;
     }
