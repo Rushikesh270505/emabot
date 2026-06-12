@@ -49,9 +49,7 @@ async function fetchProviderMarket(provider: Provider): Promise<StrategySnapshot
 
   const rows = (await candlesResponse.json()) as unknown[][];
   const ticker = (await tickerResponse.json()) as { lastPrice: string; priceChangePercent: string };
-  const now = Date.now();
-  const closedRows = rows.filter((row) => Number(row[6]) < now);
-  const candles: Candle[] = closedRows.map((row) => ({
+  const candles: Candle[] = rows.map((row) => ({
     timestamp: new Date(Number(row[0])).toISOString(),
     open: Number(row[1]),
     high: Number(row[2]),

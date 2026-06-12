@@ -60,8 +60,7 @@ async function fetchCandles(provider: Provider, endTime?: number): Promise<Candl
     throw new Error(`HTTP ${response.status}`);
   }
 
-  const now = Date.now();
-  const rows = ((await response.json()) as unknown[][]).filter((row) => Number(row[6]) < now);
+  const rows = (await response.json()) as unknown[][];
   const candles: Candle[] = rows.map((row) => ({
     timestamp: new Date(Number(row[0])).toISOString(),
     open: Number(row[1]),
