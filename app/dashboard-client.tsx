@@ -337,10 +337,7 @@ export function DashboardClient({ initialMarket }: { initialMarket: StrategySnap
     // Ensure we have USDT balance and bullish EMA setup
     setMarket((current) => {
       const hasCash = current.portfolio.cash > 0;
-      const ema9 = current.latest.ema9;
-      const ema21 = current.latest.ema21;
-      const bullish = ema9 !== undefined && ema21 !== undefined && ema9 > ema21;
-      if (!hasCash || !bullish) return current;
+      if (!hasCash) return current;
 
       const price = current.price;
       const btcAmount = current.portfolio.cash / price;
