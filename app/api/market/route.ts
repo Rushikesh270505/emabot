@@ -35,7 +35,7 @@ export async function GET() {
 }
 
 async function fetchProviderMarket(provider: Provider): Promise<StrategySnapshot> {
-  const candlesUrl = `${provider.baseUrl}/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=260`;
+  const candlesUrl = `${provider.baseUrl}/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=1000`;
   const tickerUrl = `${provider.baseUrl}/api/v3/ticker/24hr?symbol=BTCUSDT`;
 
   const [candlesResponse, tickerResponse] = await Promise.all([
